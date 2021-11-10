@@ -22,18 +22,6 @@ tmp_path = os.path.join(out_path, 'tmp')
 
 class Test_Pipeline(unittest.TestCase):
 
-	def test_cell_segmentation(self):
-		'''
-		Tests the cell segmentation function defined in track_cells.py.
-		'''
-		try:
-			pipeline.cell_segmentation(vid_name, input_path, 
-					os.path.join('data', vid_name + '.vtk'), out_path)
-		except:
-			self.assertTrue(False)
-
-		self.assertTrue(True)
-
 	def test_normalize(self):
 		'''
 		Tests the median normalization function defined in median_normalization.py.
@@ -53,7 +41,7 @@ class Test_Pipeline(unittest.TestCase):
 		try:
 			pipeline.downsample_vid(vid_name, 
 				os.path.join(normalized_path, vid_name + '.avi'), 
-				masks_path, downsampled_path, 100)
+				             downsampled_path, 100)
 		except:
 			self.assertTrue(False)
 
@@ -68,7 +56,7 @@ class Test_Pipeline(unittest.TestCase):
 		try:
 			pipeline.generate_single_vids(
 					os.path.join(downsampled_path, vid_name + '.avi'),
-					masks_path, tmp_path)
+					'./data/test_vid.vtk', tmp_path, 100)
 			pipeline.convert_to_grayscale(os.path.join(tmp_path, 
 							'test_vid_1.avi'), tmp_path)
 		except:
