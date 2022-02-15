@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 import os
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 
@@ -14,31 +14,32 @@ from torch.utils.data import Dataset, DataLoader
 ###
 class FramePairDataset(Dataset):
     def __init__(self, path_to_folder, class_types=['control', 'mdivi', 'llo'], transform=None):
-        self.labels= []
+        self.targets= []
         self.vid_path = []
         self.transform = transform
         # self.transform_input = transform_input
-        self.class_labels = class_types
+        self.class_types = class_types
 
         print(path_to_folder)
         
 
         name_constraint = lambda x: 'normalized' in x
-        for label in self.class_labels:
+        for label in self.class_types:
+            target =  self.class_types.index(label) #class 0,1,2
             path = os.path.join(path_to_folder, label)
             files = os.listdir(path)
             for file_name in files:
                     if  name_constraint(file_name):
                         self.vid_path.append(os.path.join(path, file_name))
-                        self.labels.append(label)
-
+                        self.targets.append(target)
+        
     def __len__(self):
-        return len(self.labels)
+        return len(self.targets)
 
     
     def __getitem__(self, idx):
         # do we need to load the whole video to get the 2 frames
-        label = self.labels[idx]
+        target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
         first_frame = vid[0]
         last_frame = vid[-1] 
@@ -56,7 +57,7 @@ class FramePairDataset(Dataset):
         sample = np.concatenate((first_frame, last_frame))
         sample = torch.from_numpy(sample)
 
-        return {"pair": sample, 'label': label}
+        return sample, target_class
 
 
 
