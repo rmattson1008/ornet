@@ -38,25 +38,22 @@ class FramePairDataset(Dataset):
 
     
     def __getitem__(self, idx):
-        # do we need to load the whole video to get the 2 frames
         target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
         first_frame = vid[0]
         last_frame = vid[-1] 
-        # assert u loaded the right thing? eh
 
-        # ROI selection and such
-        if self.transform is not None:
-            first_frame = self.transform_image(first_frame)
-            last_frame = self.transform_image(last_frame)
-        
+        first_frame = torch.as_tensor((first_frame))
+        last_frame = torch.as_tensor((last_frame))
 
-        # To be discussed
-        # concept - should we take the difference, not the concatenation? 
-        # implement - should this be done in a torch.transform?
-        sample = np.concatenate((first_frame, last_frame))
-        sample = torch.from_numpy(sample)
 
+        # stack frames as channels, x shape is [2, img_width, img_height]
+        sample = torch.stack((first_frame, last_frame))
+
+        # Does ROI go here?
+        if self.transform:
+            sample = self.transform(sample)
+            
         return sample, target_class
 
 
