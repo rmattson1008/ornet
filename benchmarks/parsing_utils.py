@@ -9,6 +9,16 @@ def make_parser(default_config_files=[".my_settings"]):
         action='store_true',
         help='choose to sample training data in a weighted manner',
     )
+    parser.add_argument(
+        '--train', 
+        action='store_true',
+        help='run train function',
+    )
+    parser.add_argument(
+        '--test', 
+        action='store_true',
+        help='run evaluation function ',
+    )
 
     parser.add_argument(
         "--cuda",
