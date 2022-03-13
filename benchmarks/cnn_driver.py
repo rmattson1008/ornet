@@ -50,21 +50,35 @@ def train(args, model, device, train_dataloader):
                 print(inputs.shape)
     return
 
-def eval(show_plots=False):
+def test(show_plots=False):
+    # model.eval() #??
+
+    #TODO - should this be on gpu
+    # why not make batchsize to be size of dataset
     with torch.no_grad():
+        y_true = torch.tensor([])
+        y_pred = torch.tensor([])
         for data in test_dataloader:
             images, labels = data
+            
             images = images.float()
             # calculate outputs by running images through the network
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
+            #bad approach?
+            y_pred = torch.cat((y_pred, predicted), 0) 
+            y_true = torch.cat((y_true, labels), 0) 
+
     # args.classlist()
     classes = ['control', 'mdivi', 'llo']
-    cm = confusion_matrix(labels, predicted, classes)
+    cm = confusion_matrix(y_true, y_pred)
     # accuracy = (labels == predicted).sum() / len(labels)
-    accuracy = np.sum(labels == predicted) / len(labels)
+    # accuracy = (labels == predicted).sum() / len(labels)
+    assert len(y_pred) == len(y_true)
+    print(type(y_true), type(y_pred))
+    print(y_true[0], y_pred[0])
+    accuracy = (y_true == y_pred).sum() / len(y_true)
     print("Accuracy:", accuracy)
-    # false pos. false negative... CM... three
 
     if show_plots:
         print(cm) #TODO - make pretty
@@ -121,8 +135,8 @@ def get_weighted_sampling(train_dataset):
 def get_dataloaders(args):
     transform = transforms.Compose([transforms.Resize(size=28)])
     # TODO - normalize??
-    dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
-
+    # dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+    dataset = FramePairDataset("/Users/ram/dev/quinn/ornet-data/ornet-outputs/gray-frame-pairs", class_types=args.classes, transform=transform)
     
     
     ## don't think this is the way to do this... needs even percent split to work
@@ -148,12 +162,20 @@ if __name__ == "__main__":
     # model
     model = Model_0()
 
-    args, _ = make_parser()
+    args, _ = make_parser() #TODO - uhh does this need to hook up to command line
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
 
-    train(args, model, device, train_dataloader)
+    print(args.train, args.test)
+    if args.train:
+        print("Training")
+        train(args, model, device, train_dataloader)
+    
+    if args.test:
+        #TODO - if no model load saved model
+        print("Testing")
+        test()
 
-   
+   #TODO - save models? even necessary?
 
     # eval
