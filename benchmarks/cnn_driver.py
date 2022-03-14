@@ -1,3 +1,4 @@
+from os import device_encoding
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -13,21 +14,21 @@ import numpy as np
 from parsing_utils import make_parser
 
 
-def train(args, model, device, train_dataloader):
+def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     lr = args.lr
     epochs = args.epochs
     # optimizer = Adam(model.parameters())
     optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
 
-    model.train()
-    # model.to(device)
 
-    running_loss = 0.0
 
+    model.to(device)
     for epoch in range(epochs):  
-        print("== epoch", epoch, "==")
-        for i, data in enumerate(train_dataloader, 0): #???? where/how is batchsize handled
+        model.train()
+        training_loss = 0.0
+        # running_loss = 0.0
+        for i, data in enumerate(train_dataloader, 0): 
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data[0].to(device), data[1].to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
@@ -40,21 +41,38 @@ def train(args, model, device, train_dataloader):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            training_loss += loss.item()
 
-            # print statistics
-            # TODO - use val loss
-            running_loss += loss.item()
-            if i % 20 == 19:   
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 20:.3f}')
-                running_loss = 0.0
-                print(inputs.shape)
+            # # print statistics
+            # running_loss += loss.item()
+            # if i % 20 == 19:   
+            #     print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 20:.3f}')
+            #     running_loss = 0.0 # weird to do like this idk. 
+            #     print(inputs.shape)
+
+
+        model.eval()
+        valid_loss = 0.0
+        for inputs, labels in val_dataloader:
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = inputs.to(device), labels.to(device)
+            inputs = inputs.float() # shouldn't stay on this step. 
+
+            pred = model(inputs)
+            loss = criterion(pred, labels)
+            valid_loss += loss.item()
+
+
+        print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
+             \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
+
     return
 
-def test(show_plots=False):
-    # model.eval() #??
+
+def test(args, model, show_plots=True, device='cpu'):
+    model.eval() #is necessary? 
 
     #TODO - should this be on gpu
-    # why not make batchsize to be size of dataset
     with torch.no_grad():
         y_true = torch.tensor([])
         y_pred = torch.tensor([])
@@ -70,42 +88,18 @@ def test(show_plots=False):
             y_true = torch.cat((y_true, labels), 0) 
 
     # args.classlist()
-    classes = ['control', 'mdivi', 'llo']
     cm = confusion_matrix(y_true, y_pred)
-    # accuracy = (labels == predicted).sum() / len(labels)
-    # accuracy = (labels == predicted).sum() / len(labels)
+
     assert len(y_pred) == len(y_true)
-    print(type(y_true), type(y_pred))
-    print(y_true[0], y_pred[0])
     accuracy = (y_true == y_pred).sum() / len(y_true)
     print("Accuracy:", accuracy)
 
     if show_plots:
+        print(args.classes)
         print(cm) #TODO - make pretty
 
     #what tf else we doing
     return
-
-
-# # batch_size = 1
-# # train_split = .8
-# # shuffle =
-# transform = torchvision.transforms.Compose([torchvision.transforms.Resize(size=28)])
-# # TODO - normalize??
-# dataset = FramePairDataset(path_to_data, transform=transform)
-# dataset = FramePairDataset("../../../ornet-data/ornet-outputs/gray-frame-pairs/", transform=transform)
-# classes = FramePairDataset.class_types #TODO - clean
-
-# ## don't think this is the way to do this... needs even percent split to work
-# train_size = int(train_split * len(dataset))
-# test_size = int((len(dataset) - train_size) / 2)
-# val_size = int((len(dataset) - train_size) / 2)
-
-# # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
-# train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
-# # train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
-# test_dataloader = DataLoader(test_dataset, batch_size=batch_size)
-# val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
 
 
 
@@ -121,10 +115,10 @@ def get_weights(indices):
     return weights
 
 def get_weighted_sampling(train_dataset):
-    ###
-    # Weighted Random Sampling
-    # One way to fight class imbalance
-    ###
+    """
+    Weighted Random Sampling
+    One way to fight class imbalance
+    """
     train_indices = train_dataset.indices
     weights = get_weights(train_indices)
     sampler = WeightedRandomSampler(weights, len(train_dataset))
@@ -133,6 +127,11 @@ def get_weighted_sampling(train_dataset):
 
 
 def get_dataloaders(args):
+    """
+    Access ornet dataset, apply any necessary transformations to images, 
+    split into train/test/validate, and return dataloaders
+    """
+
     transform = transforms.Compose([transforms.Resize(size=28)])
     # TODO - normalize??
     # dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
@@ -159,23 +158,20 @@ def get_dataloaders(args):
 
 
 if __name__ == "__main__":
-    # model
     model = Model_0()
 
-    args, _ = make_parser() #TODO - uhh does this need to hook up to command line
+    args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
 
     print(args.train, args.test)
     if args.train:
         print("Training")
-        train(args, model, device, train_dataloader)
+        train(args, model, train_dataloader, val_dataloader, device=device)
     
     if args.test:
         #TODO - if no model load saved model
         print("Testing")
-        test()
+        test(args, model, test_dataloader)
 
-   #TODO - save models? even necessary?
-
-    # eval
+   #TODO - save models? even necessary as they're small?
