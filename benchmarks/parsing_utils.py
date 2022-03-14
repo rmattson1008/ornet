@@ -5,7 +5,7 @@ def make_parser(default_config_files=[".my_settings"]):
     parser = ArgParser(description="Driver", default_config_files=default_config_files) #???? 
 
     parser.add_argument(
-        '--weighted_sample', 
+        '--weighted_samples', 
         action='store_true',
         help='choose to sample training data in a weighted manner',
     )
@@ -47,7 +47,6 @@ def make_parser(default_config_files=[".my_settings"]):
         help="number of epochs to train (default: 10)",
     )
 
-    # TODO - list of class types
     parser.add_argument(
         "--classes",
         type=list,
@@ -65,7 +64,6 @@ def make_parser(default_config_files=[".my_settings"]):
         help="loss function",
     )
 
-    #TODO - directory to get data 
     parser.add_argument(
         "--root_dir",
         type=str,
@@ -74,7 +72,6 @@ def make_parser(default_config_files=[".my_settings"]):
         help="sets the root directory for saving operations",
     )
 
-    #TODO - directory to get data - this makes no sense.... just have it be absolute path
     parser.add_argument(
         "--input_dir",
         type=str,
@@ -82,15 +79,6 @@ def make_parser(default_config_files=[".my_settings"]):
         metavar="i",
         help="absolute path to the directory for accessing data",
     ) 
-
-    #directory to specify where to save results
-    parser.add_argument(
-        "--out_dir",
-        type=str,
-        default="./",
-        metavar="o",
-        help="sets the directory for saving operations",
-    )
 
     #Todo save model
     parser.add_argument(
@@ -101,7 +89,6 @@ def make_parser(default_config_files=[".my_settings"]):
             help="saves the weights to a given filepath",
         )
 
-    # What is this doing... and do I need it
     # args.root_dir = args.root_path if args.root_path[-1] == "/" else f"{args.root_path}/" 
     args = parser.parse_known_args()[0]
     if args.save:
