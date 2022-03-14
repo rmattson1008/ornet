@@ -66,6 +66,9 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
              \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
 
+
+        #TODO - stop training when Val drops?
+
     return
 
 
@@ -102,28 +105,20 @@ def test(args, model, show_plots=True, device='cpu'):
     return
 
 
-
-# return array with the class weight for each instance in subset
-def get_weights(indices):
-    """
-    helper function for weighted sampling
-    """
-    y_train = [dataset.targets[i] for i in indices]
-    train_dataset_count = np.array([len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
-    weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
-    weights = weights[y_train]
-    return weights
-
-def get_weighted_sampling(train_dataset):
+def get_weighted_sampler(train_dataset, dataset):
     """
     Weighted Random Sampling
     One way to fight class imbalance
     """
-    train_indices = train_dataset.indices
-    weights = get_weights(train_indices)
+    indices = train_dataset.indices
+    y_train = [dataset.targets[i] for i in indices] # Messed up this
+    train_dataset_count = np.array([len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
+    weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
+    weights = weights[y_train]
+
     sampler = WeightedRandomSampler(weights, len(train_dataset))
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
-    return train_dataloader
+    
+    return sampler
 
 
 def get_dataloaders(args):
@@ -149,8 +144,9 @@ def get_dataloaders(args):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
-    if args.weighted_sample:
-        train_dataloader = get_weighted_sampling(train_dataset)
+    if args.weighted_samples:
+        sampler = get_weighted_sampler(train_dataset, dataset)
+        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
     else:
         train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
 
@@ -161,17 +157,16 @@ if __name__ == "__main__":
     model = Model_0()
 
     args, _ = make_parser()
+    print(args.weighted_samples)
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
-
-    print(args.train, args.test)
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
     
     if args.test:
-        #TODO - if no model load saved model
+        #TODO - if no model, load saved model
         print("Testing")
         test(args, model, test_dataloader)
 
-   #TODO - save models? even necessary as they're small?
+   #TODO - save models?
