@@ -9,6 +9,12 @@ def make_parser(default_config_files=[".my_settings"]):
         action='store_true',
         help='choose to sample training data in a weighted manner',
     )
+
+    parser.add_argument(
+        '--roi', 
+        action='store_true',
+        help='crop global image input to an ROI',
+    )
     parser.add_argument(
         '--train', 
         action='store_true',
