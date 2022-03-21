@@ -1,4 +1,3 @@
-from os import device_encoding
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -7,11 +6,13 @@ from torch.optim import Adam, SGD
 from torch.nn import CrossEntropyLoss
 
 
-from data_utils import FramePairDataset
+from data_utils import FramePairDataset, RoiTransform
 from models import Model_0
 from sklearn.metrics import confusion_matrix
 import numpy as np
-from parsing_utils import make_parser
+from parsing_utils import make_parser 
+
+from matplotlib import pyplot as plt
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -28,8 +29,9 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         model.train()
         training_loss = 0.0
         # running_loss = 0.0
-        for i, data in enumerate(train_dataloader, 0): 
+        for data in train_dataloader: 
             # get the inputs; data is a list of [inputs, labels]
+            # print(data.shape)
             inputs, labels = data[0].to(device), data[1].to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
 
@@ -121,17 +123,30 @@ def get_weighted_sampler(train_dataset, dataset):
     return sampler
 
 
-def get_dataloaders(args):
+def get_dataloaders(args, display_images=False):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
     """
 
-    transform = transforms.Compose([transforms.Resize(size=28)])
+
+    if args.roi:
+        print("Using ROI inputs")
+        transform = transforms.Compose([RoiTransform(window_size=(28,28))])
+    else:
+        print("Using global image inputs")
+        transform = transforms.Compose([transforms.Resize(size=28)])
     # TODO - normalize??
-    # dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
-    dataset = FramePairDataset("/Users/ram/dev/quinn/ornet-data/ornet-outputs/gray-frame-pairs", class_types=args.classes, transform=transform)
+    dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+
     
+    
+    if display_images:
+        # This code is here if you are like me and need to see to believe your data exists
+        for i, ((img, _), __) in enumerate(dataset):
+            if i % 20 == 0:
+                plt.imshow(img)
+                plt.show()
     
     ## don't think this is the way to do this... needs even percent split to work
     train_split = .8
@@ -157,7 +172,6 @@ if __name__ == "__main__":
     model = Model_0()
 
     args, _ = make_parser()
-    print(args.weighted_samples)
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
     if args.train:
