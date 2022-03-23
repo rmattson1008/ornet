@@ -7,7 +7,7 @@ from torch.nn import CrossEntropyLoss
 
 
 from data_utils import FramePairDataset, RoiTransform
-from models import Model_0
+from models import Model_0, Model_1, VGG_Model
 from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser 
@@ -169,7 +169,9 @@ def get_dataloaders(args, display_images=False):
 
 
 if __name__ == "__main__":
-    model = Model_0()
+    # model = Model_0()
+    # model = Model_1()
+    model = VGG_Model()
 
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
