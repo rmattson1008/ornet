@@ -1,4 +1,5 @@
 import torch
+from torch import nn
 from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
 
 
@@ -77,7 +78,7 @@ class Model_1(Module):
         x = self.linear_layers(x)
         return x
 
-# Losely styled after vgg model
+# styled after vgg model
 class VGG_Model(Module):
     
     def __init__(self):
@@ -110,3 +111,60 @@ class VGG_Model(Module):
         x = x.view(x.size(0), -1)
         x = self.linear_layers(x)
         return x
+
+
+class CNN_LSTM(Module):
+    
+    def __init__(self, num_lstm_layers, bidirectional=False):
+        super(CNN_LSTM, self).__init__()
+        # self.lstm_hidden_size = lstm_hidden_size
+        self.num_lstm_layers = num_lstm_layers
+        self.bidirectional = bidirectional
+
+        self.cnn_layers = Sequential(
+            Conv2d(1,4,3,padding=1), 
+            BatchNorm2d(4),
+            ReLU(inplace=True),
+            MaxPool2d(2, stride=2),
+            # Convolution 2
+            Conv2d(4,4,3, padding=1), 
+            BatchNorm2d(4),
+            ReLU(inplace=True),
+            MaxPool2d(2, stride=2)
+            )
+        cnn_representation_size = 4 * 7 * 7
+        #TODO - change input dimensions???
+
+        self.lstm_input_size = cnn_representation_size
+        self.lstm_hidden_size = cnn_representation_size
+
+        self.lstm = nn.LSTM(input_size=self.lstm_input_size, hidden_size=self.lstm_hidden_size, num_layers=self.num_lstm_layers, bidirectional=self.bidirectional)
+        # not sure but we may not want to use all 200 frames, maybe downsample to like 50
+        # better yet convolve on more than 2 frames. 
+        self.linear_layers = Sequential(Linear(self.lstm_hidden_size, 3)) # Really??? 
+        # can't I hook somethin up to each cell. 
+        # how is lstm handled behind the scene
+        # do layers = sequence? 
+
+        
+
+    # def forward(self, x, prev_state):
+    def forward(self, x):
+        
+        hidden_state = None #maybe actually init it, or use previous
+        for t in range(x.size(1)):
+            # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well. 
+            frames = self.cnn_layers(x[:,t, :, :, :])  
+            frames = torch.flatten(frames, start_dim=1)
+            out, hidden_state = self.lstm(frames, hidden_state)  
+            # we are not keeping track of hidden states over the sequence. 
+            # nor are keeping track of hidden states over batches.
+
+        logits = self.linear_layers(out)
+        return logits, hidden_state
+
+    # def init_state(self, sequence_length): #??? nahhh bruv
+    #     return (torch.zeros(self.num_lstm_layers, sequence_length, self.lstm_hidden_size),
+    #         torch.zeros(self.num_lstm_layers, sequence_length, self.lstm_input_size))
+
+
