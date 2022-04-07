@@ -74,7 +74,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     return
 
 
-def test(args, model, show_plots=True, device='cpu'):
+def test(args, model, test_dataloader, show_plots=True, device='cpu'):
     model.eval() #is necessary? 
 
     #TODO - should this be on gpu
@@ -103,7 +103,6 @@ def test(args, model, show_plots=True, device='cpu'):
         print(args.classes)
         print(cm) #TODO - make pretty
 
-    #what tf else we doing
     return
 
 
