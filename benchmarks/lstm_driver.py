@@ -28,13 +28,6 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         model.train()
         training_loss = 0.0
 
-        #init hidden state tracker? Does it matter if you batch_first or not?? 
-        
-        #not sure how this works in for a cnn + lstm, just lstm
-        #maybe init a 
-        # state_h, state_c = model.init_state() #why do I need this. OK ignore state for now, use it to deal with batch initializaion later
-        #TODO still confused on sequnce length(time steps) vs number of lstm layers. ig its layers per timestep, like you could have multiple? (think bidirectional stack lstm)
-        #Maybe jus say num_layers = 1 for now 
         for data in train_dataloader: 
             # get the inputs; data is a list of [inputs, labels]
             # print(data.shape)
@@ -42,38 +35,16 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             print(labels)
             inputs = inputs.float() # shouldn't stay on this step.
             print("input shape", inputs.shape)
-            #TODO resize... 
-            #should be [batch_size, L(time_steps), input_size]. I dont know if forward handles.... lets just try.... 
+         
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
-            # todo pass hidden state info between batches. 
             outputs, _ = model(inputs)
-            #state is returned from nn.LSTM, its (h_n, c_n). ex h_n should be [(1|2) * num_layers, H_out]. 
-            #Ok so the other person wanted to save [num layers, t, hiddem_size ]. basically the same but extended for every hidden state t
-
-            loss = criterion(outputs, labels) # uhhhh make sure outputs is correct y_pred
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             training_loss += loss.item()
-
-
-        # model.eval()
-        # valid_loss = 0.0
-        # for inputs, labels in val_dataloader:
-        #     # get the inputs; data is a list of [inputs, labels]
-        #     inputs, labels = inputs.to(device), labels.to(device)
-        #     inputs = inputs.float() # shouldn't stay on this step. 
-
-        #     pred = model(inputs)
-        #     loss = criterion(pred, labels)
-        #     valid_loss += loss.item()
-
-
-        # print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
-        #      \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
-        #TODO - stop training when Val drops?
 
     return
 
@@ -92,19 +63,10 @@ def get_dataloaders(args, display_images=False):
     else:
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=28)])
-    # TODO - normalize??
-    # dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
     dataset = DynamicVids(args.input_dir, class_types=args.classes, transform=transform) # nt working :/ 
 
     print("dataset", len(dataset))
-    
-    if display_images:
-        # This code is here if you are like me and need to see to believe your data exists
-        for i, ((img, _), __) in enumerate(dataset):
-            if i % 20 == 0:
-                plt.imshow(img)
-                plt.show()
-    
+
     ## don't think this is the way to do this... needs even percent split to work
     train_split = .8
     train_size = int(train_split * len(dataset))
@@ -133,7 +95,7 @@ if __name__ == "__main__":
     args, _ = make_parser()
 
     num_lstm_layers = 200 #too many?
-    # lstm_hidden_size = -1 # if we decide to have a different hidden space size then must add to model
+    # lstm_hidden_size = -1 # if we decide to have a different hidden space size then must add param to model
 
     model = CNN_LSTM(num_lstm_layers)
 
@@ -151,7 +113,3 @@ if __name__ == "__main__":
     #     print("Testing")
     #     test(args, model, test_dataloader)
 
-
-
-
-# TODO - main idea is getting the cnn to deal with reps, turn it into a sequence of frame representations. right not its trying to swallow too much. 
