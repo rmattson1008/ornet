@@ -7,7 +7,71 @@ from torch.utils.data import Dataset
 
 import torchvision
 import torchvision.transforms.functional as TF
+import cv2
+import imageio
 
+
+#kinda slow, 4-ish seconds to read in each video in a dataloader. 
+class DynamicVids(Dataset):
+    def __init__(self, path_to_folder, class_types=['control', 'mdivi', 'llo'], transform=None):
+        """
+        Initializes dataset by finding paths to all videos
+        """
+        self.targets= []
+        self.vid_path = []
+        self.transform = transform
+        # self.transform_input = transform_input
+        self.class_types = class_types
+
+        path_to_folder = os.path.join(path_to_folder)
+        print(path_to_folder)
+        
+
+        name_constraint = lambda x: 'normalized' in x
+        for label in self.class_types:
+            target =  self.class_types.index(label) #class 0,1,2
+            path = os.path.join(path_to_folder, label)
+            files = os.listdir(path)
+            for file_name in files:
+                    if  name_constraint(file_name):
+                        self.vid_path.append(os.path.join(path, file_name))
+                        self.targets.append(target)
+        
+    def __len__(self):
+        return len(self.targets)
+
+    
+    def __getitem__(self, idx):
+        target_class = self.targets[idx]
+        frames = vid_to_np_frames(self.vid_path[idx])
+        # vid = np.load(self.vid_path[idx])
+        # if num_frames == 2:
+            # first_frame = vid[0]
+            # last_frame = vid[-1] 
+            # first_frame = torch.as_tensor((first_frame))
+            # last_frame = torch.as_tensor((last_frame))
+            # sample = torch.stack((first_frame, last_frame))
+
+
+        frames = np.array((frames))
+        sample = torch.as_tensor(frames)
+
+        # add channel choice - arbitrary 1 for now but could redo with n many channels
+        sample = sample.unsqueeze(1)
+       
+        if self.transform:
+            sample = self.transform(sample)
+            
+        return sample, target_class
+
+
+def vid_to_np_frames(vid_path):
+    frames = []
+    reader = imageio.get_reader(vid_path)
+    for frame in reader:
+        frames.append(cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY))
+    reader.close()
+    return frames
 
 
 
