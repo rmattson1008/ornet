@@ -102,7 +102,7 @@ class RoiTransform:
             img_blurred = TF.gaussian_blur(last_frame, kernel_size=self.kernel_size) # TODO setting?
             values, indices = torch.topk(img_blurred.flatten(), k=1)
             if values[0] == 0.0:
-                print("NO DATA: maximum pixel value is {}, but this sample will still be trained on".format(values[0]))
+                print(f"NO DATA: maximum pixel value is {values[0]}, but this sample will still be trained on")
 
         np_idx = np.array(np.unravel_index(indices.numpy(), img_blurred.shape))
 
