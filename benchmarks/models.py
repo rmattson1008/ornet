@@ -6,7 +6,7 @@ class Model_0(Module):
     
 
     def __init__(self):
-        super(Model_0, self).__init__()
+        super().__init__()
 
 
         self.cnn_layers = Sequential(
@@ -43,7 +43,7 @@ class Model_1(Module):
     
 
     def __init__(self):
-        super(Model_1, self).__init__()
+        super().__init__()
 
 
         self.cnn_layers = Sequential(
@@ -79,7 +79,7 @@ class Model_1(Module):
 class VGG_Model(Module):
     
     def __init__(self):
-        super(VGG_Model, self).__init__()
+        super().__init__()
 
 
         self.cnn_layers = Sequential(
