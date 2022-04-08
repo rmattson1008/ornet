@@ -37,8 +37,6 @@ class Model_0(Module):
         return x
 
 
-import torch
-from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
 
 # very simlar to the first, just expands feature maps immediately and has 2 linear layers
 class Model_1(Module):
