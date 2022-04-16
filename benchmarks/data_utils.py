@@ -21,7 +21,6 @@ class FramePairDataset(Dataset):
         self.targets= []
         self.vid_path = []
         self.transform = transform
-        # self.transform_input = transform_input
         self.class_types = class_types
 
         print(path_to_folder)
@@ -43,16 +42,11 @@ class FramePairDataset(Dataset):
     def __getitem__(self, idx):
         target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
-        first_frame = vid[0]
-        last_frame = vid[-1] 
 
-        first_frame = torch.as_tensor((first_frame))
-        last_frame = torch.as_tensor((last_frame))
+        frames = vid[0:2]
+        assert frames.shape == (2,512,512) 
+        sample = torch.as_tensor(frames)
 
-        # stack frames as channels, x shape is [2, img_width, img_height]
-        sample = torch.stack((first_frame, last_frame))
-
-       
         if self.transform:
             sample = self.transform(sample)
             
