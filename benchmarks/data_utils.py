@@ -27,13 +27,12 @@ class FramePairDataset(Dataset):
         print(path_to_folder)
         
 
-        name_constraint = lambda x: 'normalized' in x
         for label in self.class_types:
             target =  self.class_types.index(label) #class 0,1,2
             path = os.path.join(path_to_folder, label)
             files = os.listdir(path)
             for file_name in files:
-                    if  name_constraint(file_name):
+                    if 'normalized' in file_name:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
         
