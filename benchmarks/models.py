@@ -13,20 +13,20 @@ class BaseCNN(Module):
         self.cnn_layers = Sequential(
             # Convolution 1
             #expand feature maps
-            Conv2d(2,4,3,padding=1), 
+            Conv2d(2,4,3), 
             BatchNorm2d(4),
             ReLU(inplace=True),
-            MaxPool2d(2, stride=2),
+            MaxPool2d(3, stride=1),
 
             # Convolution 2
-            Conv2d(4,4,3, padding=1), 
+            Conv2d(4,4,3), 
             BatchNorm2d(4),
             ReLU(inplace=True),
-            MaxPool2d(2, stride=2)
+            MaxPool2d(3, stride=1)
         )
 
         # should be length of unwound channels * feature map dims
-        db_size = 4 * 7 * 7
+        db_size = 4 * 20 * 20
         # one layer to classify
         self.linear_layers = Sequential(
             Linear(db_size, 10),
