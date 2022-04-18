@@ -4,7 +4,10 @@ import sys
 import torch
 import numpy as np
 
-sys.path.insert(0, '/home/rachel/ornet/')
+# trying to get the bechnmarks module to be visible to this file... 
+# probably missing some concept but this works if you are working in your /ornet dir
+curr_dir = os.getcwd()
+sys.path.insert(0, curr_dir)
 from benchmarks.data_utils import RoiTransform, FramePairDataset
 
 data_path = '/data/ornet/single_cells_cnns'
