@@ -86,7 +86,6 @@ def make_parser(default_config_files=[".my_settings"]):
         help="absolute path to the directory for accessing data",
     ) 
 
-    #Todo save model
     parser.add_argument(
             "--save",
             type=str,
