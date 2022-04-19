@@ -1,3 +1,5 @@
+import os
+import math
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -122,12 +124,11 @@ def get_weighted_sampler(train_dataset, dataset):
     return sampler
 
 
-def get_dataloaders(args, display_images=False):
+def get_dataloaders(args, whitelist, display_images=False):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
     """
-
 
     if args.roi:
         print("Using ROI inputs")
@@ -136,7 +137,8 @@ def get_dataloaders(args, display_images=False):
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=28)])
     # TODO - normalize??
-    dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+    dataset = FramePairDataset(args.input_dir, whitelist = whitelist, class_types=args.classes, transform=transform)
+    assert len(dataset) > 0
 
     
     
@@ -148,10 +150,15 @@ def get_dataloaders(args, display_images=False):
                 plt.show()
     
     ## don't think this is the way to do this... needs even percent split to work
+    #brittle
     train_split = .8
-    train_size = int(train_split * len(dataset))
-    test_size = int((len(dataset) - train_size) / 2)
-    val_size = int((len(dataset) - train_size) / 2)
+    train_size = math.floor(train_split * len(dataset))
+    test_size = math.ceil((len(dataset) - train_size) / 2 )
+    val_size = math.floor((len(dataset) - train_size) / 2 )
+    train_size, test_size, val_size = int(train_size), int(test_size), int(val_size)
+
+    # print(train_size,  test_size, val_size)
+    assert train_size + val_size + test_size == len(dataset)
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
@@ -159,6 +166,7 @@ def get_dataloaders(args, display_images=False):
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
     if args.weighted_samples:
+        print("using weighted sampling")
         sampler = get_weighted_sampler(train_dataset, dataset)
         train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
     else:
@@ -173,7 +181,21 @@ if __name__ == "__main__":
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)\
+    """
+    we have more segmented cell videos saved on logan then intermediates.
+    best to rerun ornet on raw data, but till discrepancy is resolved this
+    will result in using the 114 samples that Neelima used in the last scipy submit
+    class balance 29, 31, 54
+    """
+    path_to_intermediates = "/data/ornet/gmm_intermediates"
+    whitelist = []
+    for subdir in args.classes:
+        path = os.path.join(path_to_intermediates, subdir)
+        for file in os.listdir(path):
+            if 'normalized' in file:
+                whitelist.append(file.split(".")[0])
+
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, whitelist)
 
     model = BaseCNN()
     # model = VGG_Model()
