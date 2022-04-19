@@ -1,7 +1,7 @@
-# import 
+import os
+import numpy as np
 
-# listen for now just limit by the final fricking representation files... 29,31,54.  
-# later you can actually rerun ornet and figure out where ornet-outputs came from and why there's 80 instances in single_cells/llo
+# for now just limiting by the final fricking representation files... 29,31,54.  
 
 # before working on this doc:
 # save models (in workspace ig) -> drivers
@@ -16,3 +16,31 @@
 
 # Run a few classification models on all. like svm, random forest, etc
 # delany should do this. 
+
+to_data = "/data/ornet/gmm_intermediates"
+
+llos = []
+mdivis = []
+controls = []
+
+path = os.path.join(to_data, "llo")
+for file in os.listdir(path):
+    if 'normalized' in file:
+        name = os.path.join(path, file)
+        llos.append(np.load(name))
+
+path = os.path.join(to_data, "mdivi")
+for file in os.listdir(path):
+    if 'normalized' in file:
+        name = os.path.join(path, file)
+        llos.append(np.load(name))
+
+path = os.path.join(to_data, "control")
+for file in os.listdir(path):
+    if 'normalized' in file:
+        name = os.path.join(path, file)
+        llos.append(np.load(name))
+
+# Neelima took some averages... this format might be gross for that
+# check work on local
+# we can easily change cnn final decision layer size
