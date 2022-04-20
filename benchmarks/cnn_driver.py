@@ -6,6 +6,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 from torch.optim import Adam, SGD
 from torch.nn import CrossEntropyLoss
+import pickle
 
 
 from data_utils import FramePairDataset, RoiTransform
@@ -27,6 +28,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     for epoch in range(epochs):  
         model.train()
         training_loss = 0.0
+        hooks = []
         # running_loss = 0.0
         for data in train_dataloader: 
             # get the inputs; data is a list of [inputs, labels]
@@ -38,7 +40,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = model(inputs)
+            outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -59,7 +61,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
 
-            pred = model(inputs)
+            pred, _ = model(inputs)
             loss = criterion(pred, labels)
             valid_loss += loss.item()
 
@@ -73,11 +75,13 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         print(args.save)
         print("Saving model")
         torch.save(model.state_dict(), args.save)
+    
+   
     return
 
 
 def test(args, model, show_plots=True, device='cpu'):
-    model.eval() #is necessary? 
+    model.eval() 
 
 
     with torch.no_grad():
@@ -87,7 +91,7 @@ def test(args, model, show_plots=True, device='cpu'):
             images, labels = images.to(device), labels.to(device)
             images = images.float()
             # calculate outputs by running images through the network
-            outputs = model(images)
+            outputs, _ = model(images)
             _, predicted = torch.max(outputs.data, 1)
             #bad approach?
             y_pred = torch.cat((y_pred, predicted), 0) 
@@ -174,6 +178,22 @@ def get_dataloaders(args, whitelist, display_images=False):
 
     return train_dataloader, test_dataloader, val_dataloader
 
+def get_deep_features(model, loaders=[], device="cpu"):
+    print("Getting deep features")
+    feature_dict = {"control":[], "mdivi":[],"llo": []}
+    model.eval()
+    for loader in loaders:
+        #TODO does this work when batched
+        for inputs, labels in loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            inputs = inputs.float()
+            outputs, features = model(inputs)
+            feature_dict[args.classes[labels.item()]].append(features)
+            # feature_dict[str(labels.item())].append(features)
+            #TODO - keep track of name of sample?
+        
+    return feature_dict
+
 
 if __name__ == "__main__":
 
@@ -219,3 +239,13 @@ if __name__ == "__main__":
         print("Testing")
         test(args, model, test_dataloader, device=device)
 
+    # get features from final model. 
+    if 1 == 1:
+        # make sure handle exists. 
+        # TODO - make sure model is in correct state
+        loaders = [train_dataloader, test_dataloader, val_dataloader]
+        feature_dict = get_deep_features(model, loaders, device=device)
+        # TODO - test deep features method
+        save_path="/home/rachel/representations/cnn/BaseCnn_embeddings10_roi.pkl"
+        with open(save_path, 'wb') as f:
+            pickle.dump(feature_dict, f)

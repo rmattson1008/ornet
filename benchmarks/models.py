@@ -1,6 +1,7 @@
+from typing import OrderedDict
 import torch
 from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
-
+from collections import OrderedDict 
 
 # 2 blocks, expands feature maps immediately and has 2 linear layers
 class BaseCNN(Module):
@@ -8,7 +9,8 @@ class BaseCNN(Module):
 
     def __init__(self):
         super().__init__()
-
+        self.rep_out = OrderedDict()
+        # self.hooks = [] # only taking 1 hook at final layer
 
         self.cnn_layers = Sequential(
             # Convolution 1
@@ -24,20 +26,28 @@ class BaseCNN(Module):
             ReLU(inplace=True),
             MaxPool2d(3, stride=1)
         )
+        #TODO check expansion
 
         # should be length of unwound channels * feature map dims
-        db_size = 4 * 20 * 20
-        # one layer to classify
-        self.linear_layers = Sequential(
-            Linear(db_size, 10),
-            Linear(10,3))
+        cnn_out_size = 4 * 20 * 20
+        
+        self.final_rep_layer = Linear(cnn_out_size, 10)
+        self.fc = Linear(10,3)
 
+       
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embedding10"))
+
+    def forward_hook(self, layer_name):
+        def hook(module, input, output):
+            self.rep_out[layer_name] = output
+        return hook
 
     def forward(self, x):
         x = self.cnn_layers(x)
         x = x.view(x.size(0), -1)
-        x = self.linear_layers(x)
-        return x
+        x = self.final_rep_layer(x)
+        x = self.fc(x)
+        return x, self.rep_out
 
 
 
@@ -75,3 +85,12 @@ class VGG_Model(Module):
         x = x.view(x.size(0), -1)
         x = self.linear_layers(x)
         return x
+
+# class ResNet18(module):
+#     def __init__(self):
+#         super().__init__()
+
+#     # Im trying to think if theres any real adjustments that need to be made... seems to accesp whatever input
+#     #rly just copy pasta
+#     def forward():
+
