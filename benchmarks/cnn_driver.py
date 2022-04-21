@@ -211,9 +211,8 @@ if __name__ == "__main__":
     whitelist = []
     for subdir in args.classes:
         path = os.path.join(path_to_intermediates, subdir)
-        for file in os.listdir(path):
-            if 'normalized' in file:
-                whitelist.append(file.split(".")[0])
+        files = os.listdir(path)
+        whitelist.extend([x.split(".")[0] for x in files if 'normalized' in x])
 
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, whitelist)
 
