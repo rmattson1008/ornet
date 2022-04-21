@@ -7,7 +7,7 @@ from torch.nn import CrossEntropyLoss
 
 
 from data_utils import FramePairDataset, RoiTransform
-from models import  BaseCNN, VGG_Model
+from models import  BaseCNN, VGG_Model, ResNet18, ResBlock
 from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser 
@@ -31,17 +31,18 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             # print(data.shape)
             inputs, labels = data[0].to(device), data[1].to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
-
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
             outputs = model(inputs)
+          
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             training_loss += loss.item()
 
+            # TODO goddamit do logits, preds go into 
             # # print statistics
             # running_loss += loss.item()
             # if i % 20 == 19:   
@@ -134,7 +135,9 @@ def get_dataloaders(args, display_images=False):
         transform = transforms.Compose([RoiTransform(window_size=(28,28))])
     else:
         print("Using global image inputs")
-        transform = transforms.Compose([transforms.Resize(size=28)])
+        print("!!!!! using 224x224")
+        # transform = transforms.Compose([transforms.Resize(size=28)])
+        transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
     dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
 
@@ -173,10 +176,11 @@ if __name__ == "__main__":
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)\
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
 
-    model = BaseCNN()
+    # model = BaseCNN()
     # model = VGG_Model()
+    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
 
     if args.train:
@@ -196,4 +200,7 @@ if __name__ == "__main__":
                 exit()
         print("Testing")
         test(args, model, test_dataloader, device=device)
+
+
+#TODO - figure out... how to do resnet on the roi.... blow them up to 228x228
 
