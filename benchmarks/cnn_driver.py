@@ -132,7 +132,8 @@ def get_dataloaders(args, display_images=False):
 
     if args.roi:
         print("Using ROI inputs")
-        transform = transforms.Compose([RoiTransform(window_size=(28,28))])
+        # default interpolation is bilinear, no idea if there is better choice
+        transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
         print("!!!!! using 224x224")
@@ -202,5 +203,4 @@ if __name__ == "__main__":
         test(args, model, test_dataloader, device=device)
 
 
-#TODO - figure out... how to do resnet on the roi.... blow them up to 228x228
 
