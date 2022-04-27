@@ -66,9 +66,15 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
 
-            pred = model(inputs)
-            loss = criterion(pred, labels)
+            outputs = model(inputs)
+            _, pred = torch.max(outputs.data, 1)
+            loss = criterion(outputs, labels)
             valid_loss += loss.item()
+
+            # accuracy = (labels == pred).sum() / len(labels)
+            # print(labels.item(), "vs", pred.item())
+            #TODO - is it really computing the correct value???? softmax anyone? 
+            # the model definitely outputs logits... then loss is conssentropy loss... computed in criterio 
 
 
         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
@@ -76,6 +82,8 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
 
         #TODO - stop training when Val drops?
+
+
     if args.save:
         print(args.save)
         print("Saving model")
@@ -83,7 +91,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     return
 
 
-def test(args, model, show_plots=True, device='cpu'):
+def test(args,  model, test_dataloader,show_plots=True, device='cpu'):
     model.eval() #is necessary? 
 
 
@@ -115,23 +123,24 @@ def test(args, model, show_plots=True, device='cpu'):
     return
 
 
-def get_weighted_sampler(train_dataset, dataset):
-    """
-    Weighted Random Sampling
-    One way to fight class imbalance
-    """
-    indices = train_dataset.indices
-    y_train = [dataset.targets[i] for i in indices] # Messed up this
-    train_dataset_count = np.array([len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
-    weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
-    weights = weights[y_train]
+#TODO - some other weight to lessen the importance of llo in training.
+# def get_weighted_sampler(train_dataset, dataset):
+#     """
+#     Weighted Random Sampling
+#     One way to fight class imbalance
+#     """
+#     indices = train_dataset.indices
+#     y_train = [dataset.targets[i] for i in indices] # Messed up this
+#     train_dataset_count = np.array([len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
+#     weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
+#     weights = weights[y_train]
 
-    sampler = WeightedRandomSampler(weights, len(train_dataset))
+#     sampler = WeightedRandomSampler(weights, len(train_dataset))
     
-    return sampler
+#     return sampler
 
 
-def get_dataloaders(args, whitelist, display_images=False):
+def get_dataloaders(args, accept_list):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
@@ -143,22 +152,16 @@ def get_dataloaders(args, whitelist, display_images=False):
         transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
-        print("!!!!! using 224x224")
-        # transform = transforms.Compose([transforms.Resize(size=28)])
-        transform = transforms.Compose([transforms.Resize(size=224)])
+        # print("!!!!! using 224x224")
+        transform = transforms.Compose([transforms.Resize(size=28)])
+        # transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
-    dataset = FramePairDataset(args.input_dir, whitelist = whitelist, class_types=args.classes, transform=transform)
+    # dataset = FramePairDataset(args.input_dir, class_types=args.classes)
+    dataset = FramePairDataset(args.input_dir, accept_list = accept_list, class_types=args.classes, transform=transform)
+    # dataset = augment_dataset(dataset, transform)
+
     assert len(dataset) > 0
 
-    
-    
-    if display_images:
-        # This code is here if you are like me and need to see to believe your data exists
-        for i, ((img, _), __) in enumerate(dataset):
-            if i % 20 == 0:
-                plt.imshow(img)
-                plt.show()
-    
     ## don't think this is the way to do this... needs even percent split to work
     #brittle
     train_split = .8
@@ -167,7 +170,6 @@ def get_dataloaders(args, whitelist, display_images=False):
     val_size = math.floor((len(dataset) - train_size) / 2 )
     train_size, test_size, val_size = int(train_size), int(test_size), int(val_size)
 
-    # print(train_size,  test_size, val_size)
     assert train_size + val_size + test_size == len(dataset)
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
@@ -175,25 +177,36 @@ def get_dataloaders(args, whitelist, display_images=False):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
-    if args.weighted_samples:
-        print("using weighted sampling")
-        sampler = get_weighted_sampler(train_dataset, dataset)
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
-    else:
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+    ## augment images
+    print(len(train_dataset))
+    train_dataset = augment_dataset(train_dataset, transform)
+    print(len(train_dataset))
+
+
+    # if args.weighted_samples:
+    #     print("using weighted sampling")
+    #     sampler = get_weighted_sampler(train_dataset, dataset)
+    #     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
+    # else:
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
 
     return train_dataloader, test_dataloader, val_dataloader
 
 
 # ur gonna need to do this just for train but let stry on all
-def combine_datasets(path, transform):
+def augment_dataset(dataset, base_transform):
+    """
+    makes a deep copy of the original dataset
+    with a new transform for each desired augmentariosn
+    returns composition of all such datasets
+    """
     # make a list girl
     datasets = []
-    dataset = FramePairDataset(args.input_dir, class_types=args.classes)
-    # datasets.append(dataset)
+    
+    datasets.append(dataset)
     # didnt even include the original transform... 
 
-    Ts = [
+    albument_Ts = [
         A.Compose([A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p = 1), ToTensorV2()]),
         A.Compose([A.Transpose(p=1), ToTensorV2()]),
         A.Compose([A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]),
@@ -202,18 +215,16 @@ def combine_datasets(path, transform):
     ]
       #all these things wont work together...
         
-    tensor_Ts = [ transforms.RandomAffine(0, shear = (20,40)) ]
+    #Can't get torch transforms and albumentations transforms to play nicely
+    torch_Ts = [transforms.RandomAffine(0, shear = (20,40)) ]
+    #try some slighter transforms???? 
 
-    for t in Ts:
-        print("######")
-        print(t)
+    for t in albument_Ts:
         ds = copy.deepcopy(dataset)
-        ds.transform = A.Compose([t])
+        ds.aug = A.Compose([t])
         datasets.append(ds)
 
-    for t in tensor_Ts:
-        print("######")
-        print(t)
+    for t in torch_Ts:
         ds = copy.deepcopy(dataset)
         ds.transform = transforms.Compose([t])
         datasets.append(ds)
@@ -221,18 +232,6 @@ def combine_datasets(path, transform):
 
     print("Exiting dataset loader")
     return torch.utils.data.ConcatDataset(datasets)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -250,18 +249,18 @@ if __name__ == "__main__":
     class balance 29, 31, 54
     """
     path_to_intermediates = "/data/ornet/gmm_intermediates"
-    whitelist = []
+    accept_list = []
     for subdir in args.classes:
         path = os.path.join(path_to_intermediates, subdir)
         for file in os.listdir(path):
             if 'normalized' in file:
-                whitelist.append(file.split(".")[0])
+                accept_list.append(file.split(".")[0])
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, whitelist)
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
 
-    # model = BaseCNN()
+    model = BaseCNN()
     # model = VGG_Model()
-    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    # model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
 
     if args.train:

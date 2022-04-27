@@ -18,10 +18,11 @@ import cv2
 # from entire video. Now the data is stored as as only 2 frames, so not really a necessary step
 ###
 class FramePairDataset(Dataset):
-    def __init__(self, path_to_folder, whitelist=[], class_types=['control', 'mdivi', 'llo'], transform=None):
+    def __init__(self, path_to_folder, accept_list=[], class_types=['control', 'mdivi', 'llo'], transform=None, augmentations=None):
         self.targets= []
         self.vid_path = []
         self.transform = transform
+        self.aug = augmentations
         self.class_types = class_types
 
         print(path_to_folder)
@@ -33,7 +34,7 @@ class FramePairDataset(Dataset):
             files = os.listdir(path)
             for file_name in files:
                     # if 'normalized' in file_name:
-                    if file_name.split(".")[0] in whitelist:
+                    if file_name.split(".")[0] in accept_list:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
         
@@ -48,25 +49,29 @@ class FramePairDataset(Dataset):
         sample = vid[0:2]
         assert sample.shape == (2,512,512) 
 
+        # an attempt to run spatial transforms (from albumentations package) on single channels
+        # method believes that the channel dim of size 2 is first dim of image. 
+        # does not work for augmentations meant for 3 channeled images. 
+        if self.aug:
+            frame1 = sample[0]
+            frame2 = sample[1]
+            frame1 = self.transform(image=frame1)['image']
+            # frame1 = self.transform(image=frame1)
+            frame2 = self.transform(image=frame2)['image']
+            # frame2 = self.transform(image=frame2)
+            sample = np.concatenate((frame1,frame2))
+            assert sample.shape == (2,512,512)
+
+        # really albumentations should be able to return a tensor, don't know whats happening with the channels
+        s = torch.as_tensor(sample)
         if self.transform:
             try:
-                s = torch.as_tensor(sample)
                 sample = self.transform(s)
             except KeyError: 
-                #disgusting, trying to get albumentations tranforms to work over channels...
-                # idk they have channel specific transforms so this can't be neccesary
-                # frame1 = cv2.cvtColor(sample[0], cv2.COLOR_GRAY2RGB)
-                # frame2 = cv2.cvtColor(sample[1], cv2.COLOR_GRAY2RGB)
-                frame1 = sample[0]
-                frame2 = sample[1]
-                frame1 = self.transform(image=frame1)['image']
-                # frame1 = self.transform(image=frame1)
-                frame2 = self.transform(image=frame2)['image']
-                # frame2 = self.transform(image=frame2)
-                sample = np.concatenate((frame1,frame2))
-                assert sample.shape == (2,512,512)
+               print("make sure you aren't passing in albumentations through `transforms` ")
 
-        sample = torch.as_tensor(sample)
+        assert sample.shape == (2,28,28)
+        # sample = torch.as_tensor(sample)
         return sample, target_class
 
 
