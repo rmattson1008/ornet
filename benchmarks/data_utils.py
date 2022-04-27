@@ -18,7 +18,7 @@ import cv2
 # from entire video. Now the data is stored as as only 2 frames, so not really a necessary step
 ###
 class FramePairDataset(Dataset):
-    def __init__(self, path_to_folder, class_types=['control', 'mdivi', 'llo'], transform=None):
+    def __init__(self, path_to_folder, whitelist=[], class_types=['control', 'mdivi', 'llo'], transform=None):
         self.targets= []
         self.vid_path = []
         self.transform = transform
@@ -32,7 +32,8 @@ class FramePairDataset(Dataset):
             path = os.path.join(path_to_folder, label)
             files = os.listdir(path)
             for file_name in files:
-                    if 'normalized' in file_name:
+                    # if 'normalized' in file_name:
+                    if file_name.split(".")[0] in whitelist:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
         
