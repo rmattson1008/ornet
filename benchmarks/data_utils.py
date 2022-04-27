@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 
 import torchvision
 import torchvision.transforms.functional as TF
+import cv2
 
 
 
@@ -43,13 +44,28 @@ class FramePairDataset(Dataset):
         target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
 
-        frames = vid[0:2]
-        assert frames.shape == (2,512,512) 
-        sample = torch.as_tensor(frames)
+        sample = vid[0:2]
+        assert sample.shape == (2,512,512) 
 
         if self.transform:
-            sample = self.transform(sample)
-            
+            try:
+                s = torch.as_tensor(sample)
+                sample = self.transform(s)
+            except KeyError: 
+                #disgusting, trying to get albumentations tranforms to work over channels...
+                # idk they have channel specific transforms so this can't be neccesary
+                # frame1 = cv2.cvtColor(sample[0], cv2.COLOR_GRAY2RGB)
+                # frame2 = cv2.cvtColor(sample[1], cv2.COLOR_GRAY2RGB)
+                frame1 = sample[0]
+                frame2 = sample[1]
+                frame1 = self.transform(image=frame1)['image']
+                # frame1 = self.transform(image=frame1)
+                frame2 = self.transform(image=frame2)['image']
+                # frame2 = self.transform(image=frame2)
+                sample = np.concatenate((frame1,frame2))
+                assert sample.shape == (2,512,512)
+
+        sample = torch.as_tensor(sample)
         return sample, target_class
 
 

@@ -14,6 +14,12 @@ from parsing_utils import make_parser
 
 from matplotlib import pyplot as plt
 
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import copy
+
+
+
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     lr = args.lr
@@ -140,7 +146,8 @@ def get_dataloaders(args, display_images=False):
         # transform = transforms.Compose([transforms.Resize(size=28)])
         transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
-    dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+    # dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+    dataset = combine_datasets(args.input_dir, transform)
 
     
     
@@ -169,6 +176,58 @@ def get_dataloaders(args, display_images=False):
         train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
 
     return train_dataloader, test_dataloader, val_dataloader
+
+
+# ur gonna need to do this just for train but let stry on all
+def combine_datasets(path, transform):
+    # make a list girl
+    datasets = []
+    dataset = FramePairDataset(args.input_dir, class_types=args.classes)
+    # datasets.append(dataset)
+    # didnt even include the original transform... 
+
+    Ts = [
+        A.Compose([A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p = 1), ToTensorV2()]),
+        A.Compose([A.Transpose(p=1), ToTensorV2()]),
+        A.Compose([A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]),
+        # A.Compose([A.RandomShadow((0,0,1,1), 5, 10,
+        #  3, p=1), ToTensorV2()]),
+    ]
+      #all these things wont work together...
+        
+    tensor_Ts = [ transforms.RandomAffine(0, shear = (20,40)) ]
+
+    for t in Ts:
+        print("######")
+        print(t)
+        ds = copy.deepcopy(dataset)
+        ds.transform = A.Compose([t])
+        datasets.append(ds)
+
+    for t in tensor_Ts:
+        print("######")
+        print(t)
+        ds = copy.deepcopy(dataset)
+        ds.transform = transforms.Compose([t])
+        datasets.append(ds)
+
+
+    print("Exiting dataset loader")
+    return torch.utils.data.ConcatDataset(datasets)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
