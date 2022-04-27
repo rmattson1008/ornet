@@ -10,15 +10,18 @@ import torchvision.transforms.functional as TF
 import cv2
 
 
-
-
-###
-# The dataset initializes with the file path to frame pairs
-# and loads the image when get image is called. Did this back when planning to take frames 
-# from entire video. Now the data is stored as as only 2 frames, so not really a necessary step
-###
 class FramePairDataset(Dataset):
+    """
+    dataset class for first and last frames of cell videos. 
+    """
     def __init__(self, path_to_folder, accept_list=[], class_types=['control', 'mdivi', 'llo'], transform=None, augmentations=None):
+        """
+        path_to_folder: directory containing subfolders of class instances
+        accept_list: list of all file names that should be included in the dataset. Contrains unwanted samples.
+        class_types: list of possible class names
+        transform: torch type transform, typically for base transformation
+        augmentation: ablumentations type transforms, for augmenting/expanding data set
+        """
         self.targets= []
         self.vid_path = []
         self.transform = transform
@@ -41,7 +44,6 @@ class FramePairDataset(Dataset):
     def __len__(self):
         return len(self.targets)
 
-    
     def __getitem__(self, idx):
         target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
@@ -50,7 +52,7 @@ class FramePairDataset(Dataset):
         assert sample.shape == (2,512,512) 
 
         # an attempt to run spatial transforms (from albumentations package) on single channels
-        # method believes that the channel dim of size 2 is first dim of image. 
+        # methods think that the channel dim of size 2 is first dim of image. 
         # does not work for augmentations meant for 3 channeled images. 
         if self.aug:
             frame1 = sample[0]
@@ -62,15 +64,13 @@ class FramePairDataset(Dataset):
             sample = np.concatenate((frame1,frame2))
             assert sample.shape == (2,512,512)
 
-        # really albumentations should be able to return a tensor, don't know whats happening with the channels
         s = torch.as_tensor(sample)
         if self.transform:
             try:
                 sample = self.transform(s)
             except KeyError: 
-               print("make sure you aren't passing in albumentations through `transforms` ")
+               print("Make sure you aren't passing in albumentations through `transform` ")
 
-        assert sample.shape == (2,28,28)
         # sample = torch.as_tensor(sample)
         return sample, target_class
 

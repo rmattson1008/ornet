@@ -50,13 +50,6 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             optimizer.step()
             training_loss += loss.item()
 
-            # TODO goddamit do logits, preds go into 
-            # # print statistics
-            # running_loss += loss.item()
-            # if i % 20 == 19:   
-            #     print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 20:.3f}')
-            #     running_loss = 0.0 # weird to do like this idk. 
-            #     print(inputs.shape)
 
 
         model.eval()
@@ -71,18 +64,11 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             loss = criterion(outputs, labels)
             valid_loss += loss.item()
 
-            # accuracy = (labels == pred).sum() / len(labels)
-            # print(labels.item(), "vs", pred.item())
-            #TODO - is it really computing the correct value???? softmax anyone? 
-            # the model definitely outputs logits... then loss is conssentropy loss... computed in criterio 
-
-
         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
              \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
 
 
-        #TODO - stop training when Val drops?
-
+        #TODO - stop training when Val drops? val score is wack right now
 
     if args.save:
         print(args.save)
@@ -108,7 +94,6 @@ def test(args,  model, test_dataloader,show_plots=True, device='cpu'):
             y_pred = torch.cat((y_pred, predicted), 0) 
             y_true = torch.cat((y_true, labels), 0) 
 
-    # args.classlist()
     cm = confusion_matrix(y_true.cpu(), y_pred.cpu())
 
     assert len(y_pred) == len(y_true)
@@ -119,7 +104,6 @@ def test(args,  model, test_dataloader,show_plots=True, device='cpu'):
         print(args.classes)
         print(cm) #TODO - make pretty
 
-    #what tf else we doing
     return
 
 
@@ -162,8 +146,8 @@ def get_dataloaders(args, accept_list):
 
     assert len(dataset) > 0
 
-    ## don't think this is the way to do this... needs even percent split to work
-    #brittle
+    ## don't think this is the best way to do this... needs even percent split to work
+    # brittle
     train_split = .8
     train_size = math.floor(train_split * len(dataset))
     test_size = math.ceil((len(dataset) - train_size) / 2 )
@@ -193,7 +177,6 @@ def get_dataloaders(args, accept_list):
     return train_dataloader, test_dataloader, val_dataloader
 
 
-# ur gonna need to do this just for train but let stry on all
 def augment_dataset(dataset, base_transform):
     """
     makes a deep copy of the original dataset
@@ -207,33 +190,32 @@ def augment_dataset(dataset, base_transform):
     # didnt even include the original transform... 
 
     albument_Ts = [
-        A.Compose([A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p = 1), ToTensorV2()]),
-        A.Compose([A.Transpose(p=1), ToTensorV2()]),
-        A.Compose([A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]),
-        # A.Compose([A.RandomShadow((0,0,1,1), 5, 10,
-        #  3, p=1), ToTensorV2()]),
+        [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p = 1), ToTensorV2()],
+        [A.Transpose(p=1), ToTensorV2()],
+        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()],
+        #[A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
     ]
-      #all these things wont work together...
         
     #Can't get torch transforms and albumentations transforms to play nicely
-    torch_Ts = [transforms.RandomAffine(0, shear = (20,40)) ]
+    torch_Ts = [
+        transforms.RandomAffine(0, shear = (20,40)),
+        transforms.RandomAffine(0, shear = (-10,10)) 
+        ]
     #try some slighter transforms???? 
 
     for t in albument_Ts:
         ds = copy.deepcopy(dataset)
-        ds.aug = A.Compose([t])
+        ds.aug = A.Compose(t)
         datasets.append(ds)
 
     for t in torch_Ts:
         ds = copy.deepcopy(dataset)
-        ds.transform = transforms.Compose([t])
+        ds.transform = transforms.Compose([base_transform, t])
         datasets.append(ds)
 
-
-    print("Exiting dataset loader")
+    # anyway is making deep copies the best way to do this? 
+    print("Expanded dataset")
     return torch.utils.data.ConcatDataset(datasets)
-
-
 
 
 if __name__ == "__main__":
