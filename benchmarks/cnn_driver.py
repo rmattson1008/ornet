@@ -124,7 +124,7 @@ def test(args,  model, test_dataloader,show_plots=True, device='cpu'):
 #     return sampler
 
 
-def get_dataloaders(args, accept_list):
+def get_dataloaders(args, accept_list, resize=28):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
@@ -136,8 +136,8 @@ def get_dataloaders(args, accept_list):
         transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
+        transform = transforms.Compose([transforms.Resize(size=resize)])
         # print("!!!!! using 224x224")
-        transform = transforms.Compose([transforms.Resize(size=28)])
         # transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
     # dataset = FramePairDataset(args.input_dir, class_types=args.classes)
@@ -238,11 +238,13 @@ if __name__ == "__main__":
             if 'normalized' in file:
                 accept_list.append(file.split(".")[0])
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
+    # train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
+    # if using resnet
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list, resize=224)
 
-    model = BaseCNN()
+    # model = BaseCNN()
     # model = VGG_Model()
-    # model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
 
     if args.train:
