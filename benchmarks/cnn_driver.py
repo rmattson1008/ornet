@@ -7,7 +7,7 @@ from torch.nn import CrossEntropyLoss
 
 
 from data_utils import FramePairDataset, RoiTransform
-from models import Model_0, Model_1, VGG_Model
+from models import  BaseCNN, VGG_Model, ResNet18, ResBlock
 from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser 
@@ -21,10 +21,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = Adam(model.parameters())
     optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
-
-
-
-    model.to(device)
+    
     for epoch in range(epochs):  
         model.train()
         training_loss = 0.0
@@ -34,17 +31,18 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             # print(data.shape)
             inputs, labels = data[0].to(device), data[1].to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
-
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
             outputs = model(inputs)
+          
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             training_loss += loss.item()
 
+            # TODO goddamit do logits, preds go into 
             # # print statistics
             # running_loss += loss.item()
             # if i % 20 == 19:   
@@ -70,20 +68,22 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
 
         #TODO - stop training when Val drops?
-
+    if args.save:
+        print(args.save)
+        print("Saving model")
+        torch.save(model.state_dict(), args.save)
     return
 
 
 def test(args, model, test_dataloader, show_plots=True, device='cpu'):
     model.eval() #is necessary? 
 
-    #TODO - should this be on gpu
+
     with torch.no_grad():
-        y_true = torch.tensor([])
-        y_pred = torch.tensor([])
-        for data in test_dataloader:
-            images, labels = data
-            
+        y_true = torch.tensor([]).to(device)
+        y_pred = torch.tensor([]).to(device)
+        for images, labels in test_dataloader:
+            images, labels = images.to(device), labels.to(device)
             images = images.float()
             # calculate outputs by running images through the network
             outputs = model(images)
@@ -93,7 +93,7 @@ def test(args, model, test_dataloader, show_plots=True, device='cpu'):
             y_true = torch.cat((y_true, labels), 0) 
 
     # args.classlist()
-    cm = confusion_matrix(y_true, y_pred)
+    cm = confusion_matrix(y_true.cpu(), y_pred.cpu())
 
     assert len(y_pred) == len(y_true)
     accuracy = (y_true == y_pred).sum() / len(y_true)
@@ -131,10 +131,13 @@ def get_dataloaders(args, display_images=False):
 
     if args.roi:
         print("Using ROI inputs")
-        transform = transforms.Compose([RoiTransform(window_size=(28,28))])
+        # default interpolation is bilinear, no idea if there is better choice
+        transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
-        transform = transforms.Compose([transforms.Resize(size=28)])
+        print("!!!!! using 224x224")
+        # transform = transforms.Compose([transforms.Resize(size=28)])
+        transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
     dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
 
@@ -168,20 +171,35 @@ def get_dataloaders(args, display_images=False):
 
 
 if __name__ == "__main__":
-    # model = Model_0()
-    # model = Model_1()
-    model = VGG_Model()
 
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
+    device = torch.device(device)
+
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
+
+    # model = BaseCNN()
+    # model = VGG_Model()
+    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    model.to(device)
+
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
-    
+        
     if args.test:
-        #TODO - if no model, load saved model
+        if not args.train:
+            try:
+                saved_state = torch.load(args.save)
+                model.load_state_dict(saved_state)
+                #how to check soemthing happened..
+                print(type(model))
+            except:
+                #please exit
+                print("Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
+                exit()
         print("Testing")
-        test(args, model, test_dataloader)
+        test(args, model, test_dataloader, device=device)
 
-   #TODO - save models?
+
+
