@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
+from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d, LeakyReLU
 
 
 # 2 blocks, expands feature maps immediately and has 2 linear layers
@@ -16,13 +16,13 @@ class BaseCNN(Module):
             #expand feature maps
             Conv2d(2,4,3), 
             BatchNorm2d(4),
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(3, stride=1),
 
             # Convolution 2
             Conv2d(4,4,3), 
             BatchNorm2d(4),
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(3, stride=1)
         )
 
@@ -53,15 +53,15 @@ class VGG_Model(Module):
         self.cnn_layers = Sequential(
             # BLock 3
             Conv2d(2,64,3,padding=1), 
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             Conv2d(64,128,3,padding=1), 
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(2, stride=2),
             # Block 2
             Conv2d(128,256,3,padding=1), 
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             Conv2d(256,256,3,padding=1), 
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(2, stride=2),
         )
 
@@ -98,10 +98,10 @@ class ResBlock(nn.Module):
 
     def forward(self, input):
         shortcut = self.shortcut(input)
-        input = nn.ReLU()(self.bn1(self.conv1(input)))
-        input = nn.ReLU()(self.bn2(self.conv2(input)))
+        input = nn.LeakyReLU()(self.bn1(self.conv1(input)))
+        input = nn.LeakyReLU()(self.bn2(self.conv2(input)))
         input = input + shortcut
-        return nn.ReLU()(input)
+        return nn.LeakyReLU()(input)
 
 
 class ResNet18(nn.Module):
@@ -111,7 +111,7 @@ class ResNet18(nn.Module):
             nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(64),
-            nn.ReLU()
+            nn.LeakyReLU()
         )
 
         self.layer1 = nn.Sequential(
