@@ -4,11 +4,11 @@ import os
 def make_parser(default_config_files=[".my_settings"]):
     parser = ArgParser(description="Driver", default_config_files=default_config_files) #???? 
 
-    # parser.add_argument(
-    #     '--weighted_samples', 
-    #     action='store_true',
-    #     help='choose to sample training data in a weighted manner',
-    # )
+    parser.add_argument(
+        '--weighted_samples', 
+        action='store_true',
+        help='choose to sample training data in a weighted manner',
+    )
 
     parser.add_argument(
         '--roi', 

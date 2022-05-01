@@ -25,7 +25,7 @@ class FramePairDataset(Dataset):
         self.targets= []
         self.vid_path = []
         self.transform = transform
-        self.aug = augmentations
+        # self.aug = augmentations
         self.class_types = class_types
 
         print(path_to_folder)
@@ -51,26 +51,10 @@ class FramePairDataset(Dataset):
         sample = vid[0:2]
         assert sample.shape == (2,512,512) 
 
-        # an attempt to run spatial transforms (from albumentations package) on single channels
-        # methods think that the channel dim of size 2 is first dim of image. 
-        # does not work for augmentations meant for 3 channeled images. 
-        if self.aug:
-            frame1 = sample[0]
-            frame2 = sample[1]
-            frame1 = self.transform(image=frame1)['image']
-            # frame1 = self.transform(image=frame1)
-            frame2 = self.transform(image=frame2)['image']
-            # frame2 = self.transform(image=frame2)
-            sample = np.concatenate((frame1,frame2))
-            assert sample.shape == (2,512,512)
-
         s = torch.as_tensor(sample)
         if self.transform:
-            try:
                 sample = self.transform(s)
-            except KeyError: 
-               print("Make sure you aren't passing in albumentations through `transform` ")
-
+        
         # sample = torch.as_tensor(sample)
         return sample, target_class
 
