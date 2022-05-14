@@ -9,11 +9,12 @@ import torchvision
 import torchvision.transforms.functional as TF
 import cv2
 import imageio
+import math
 
 
 #kinda slow, 4-ish seconds to read in each video in a dataloader. 
 class DynamicVids(Dataset):
-    def __init__(self, path_to_folder, class_types=['control', 'mdivi', 'llo'], transform=None):
+    def __init__(self, path_to_folder, num_to_sample=50, class_types=['control', 'mdivi', 'llo'], transform=None):
         """
         Initializes dataset by finding paths to all videos
         """
@@ -22,6 +23,7 @@ class DynamicVids(Dataset):
         self.transform = transform
         # self.transform_input = transform_input
         self.class_types = class_types
+        self.num_to_sample = num_to_sample
 
         path_to_folder = os.path.join(path_to_folder)
         print(path_to_folder)
@@ -43,7 +45,14 @@ class DynamicVids(Dataset):
     
     def __getitem__(self, idx):
         target_class = self.targets[idx]
-        frames = vid_to_np_frames(self.vid_path[idx])
+        # frames = vid_to_np_frames(self.vid_path[idx])
+        frames = np.load(self.vid_path[idx])
+        # if frames.shape < 100:
+
+        assert self.num_to_sample <= frames.shape[0]
+        step = math.floor(frames.shape[0] / self.num_to_sample)
+        frames = frames[0:-1:step]
+
         # vid = np.load(self.vid_path[idx])
         # if num_frames == 2:
             # first_frame = vid[0]

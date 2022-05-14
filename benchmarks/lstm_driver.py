@@ -24,11 +24,12 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
     model.to(device)
     for epoch in range(epochs):
-        print("Epoch", epoch)
+        print("Epoch", epoch + 1)
         model.train()
         training_loss = 0.0
 
         for i, data in enumerate(train_dataloader):
+            print("training on", i)
             # if i % 30 == 0:
 
             # get the inputs; data is a list of [inputs, labels]
@@ -118,7 +119,7 @@ def get_dataloaders(args, display_images=False):
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=28)])
     dataset = DynamicVids(
-        args.input_dir, class_types=args.classes, transform=transform)  # nt working :/
+        args.input_dir, num_to_sample=50, class_types=args.classes, transform=transform)  # nt working :/
 
     print("dataset", len(dataset))
 
@@ -134,14 +135,29 @@ def get_dataloaders(args, display_images=False):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
-    # if args.weighted_samples:
-    #     sampler = get_weighted_sampler(train_dataset, dataset)
-    #     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
-    # else:
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+    if args.weighted_samples:
+        sampler = get_weighted_sampler(train_dataset, dataset)
+        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
+    else:
+        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
 
     return train_dataloader, test_dataloader, val_dataloader
 
+def get_weighted_sampler(train_dataset, dataset):
+    """
+    Weighted Random Sampling
+    One way to fight class imbalance
+    """
+    indices = train_dataset.indices
+    y_train = [dataset.targets[i] for i in indices]  # Messed up this
+    train_dataset_count = np.array(
+        [len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
+    weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
+    weights = weights[y_train]
+
+    sampler = WeightedRandomSampler(weights, len(train_dataset))
+
+    return sampler
 
 if __name__ == "__main__":
     print("Main")
@@ -162,17 +178,18 @@ if __name__ == "__main__":
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
 
+    if args.save:
+        try:
+            saved_state = torch.load(args.save)
+            model.load_state_dict(saved_state)
+            # how to check soemthing happened..
+            print(type(model))
+        except:
+            # please exit
+            print(
+                "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
+            exit()
+
     if args.test:
-        if not args.train:
-            try:
-                saved_state = torch.load(args.save)
-                model.load_state_dict(saved_state)
-                # how to check soemthing happened..
-                print(type(model))
-            except:
-                # please exit
-                print(
-                    "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
-                exit()
         print("Testing")
         test(args, model, test_dataloader, device=device)
