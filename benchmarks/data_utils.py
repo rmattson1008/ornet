@@ -14,7 +14,7 @@ import math
 
 #kinda slow, 4-ish seconds to read in each video in a dataloader. 
 class DynamicVids(Dataset):
-    def __init__(self, path_to_folder, num_to_sample=50, class_types=['control', 'mdivi', 'llo'], transform=None):
+    def __init__(self, path_to_folder, accept_list, num_to_sample=10, class_types=['control', 'mdivi', 'llo'], transform=None):
         """
         Initializes dataset by finding paths to all videos
         """
@@ -29,13 +29,12 @@ class DynamicVids(Dataset):
         print(path_to_folder)
         
 
-        name_constraint = lambda x: 'normalized' in x
         for label in self.class_types:
             target =  self.class_types.index(label) #class 0,1,2
             path = os.path.join(path_to_folder, label)
             files = os.listdir(path)
             for file_name in files:
-                    if  name_constraint(file_name):
+                    if  file_name.split(".")[0] in accept_list:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
         
@@ -49,9 +48,25 @@ class DynamicVids(Dataset):
         frames = np.load(self.vid_path[idx])
         # if frames.shape < 100:
 
+        # don't know how to handle subsampling from variable length vids.
+        #maybe better to just use random choice, 
         assert self.num_to_sample <= frames.shape[0]
-        step = math.floor(frames.shape[0] / self.num_to_sample)
-        frames = frames[0:-1:step]
+        assert self.num_to_sample <= 50 # frame selection is just gonna be brittle
+        if frames.shape[0] == 200:
+            step = math.ceil(frames.shape[0] / self.num_to_sample)
+            # step = round(frames.shape[0] / self.num_to_sample)
+            frames = frames[0:-1:step]
+        elif frames.shape[0] < 200:
+            # step = math.round(frames.shape[0] / self.num_to_sample)
+            step = math.floor(frames.shape[0] / self.num_to_sample)
+            frames = frames[0:-1:step]
+            # truncate some extras that show up due to floating point div
+            frames = frames[:self.num_to_sample]
+        else:
+            print("Why's your data got more than 200 frames I didn't train for this")
+        assert frames.shape[0] == self.num_to_sample
+
+
 
         # vid = np.load(self.vid_path[idx])
         # if num_frames == 2:
@@ -62,15 +77,19 @@ class DynamicVids(Dataset):
             # sample = torch.stack((first_frame, last_frame))
 
 
-        frames = np.array((frames))
+        # frames = np.array((frames))
         sample = torch.as_tensor(frames)
 
         # add channel choice - arbitrary 1 for now but could redo with n many channels
         sample = sample.unsqueeze(1)
+        # print(sample.shape)
+        # sample = torch.reshape(sample, (11,3,512,512))
+        # print(sample.shape)
        
         if self.transform:
             sample = self.transform(sample)
             
+        # print(sample.shape)
         return sample, target_class
 
 
