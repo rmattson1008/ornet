@@ -12,14 +12,18 @@ from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser
 
-from matplotlib import pyplot as plt
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import copy
+import os
+import math
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     lr = args.lr
     epochs = args.epochs
-    # optimizer = Adam(model.parameters())
-    optimizer = SGD(model.parameters(), lr=lr)
+    optimizer = Adam(model.parameters())
+    # optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
 
     model.to(device)
@@ -34,14 +38,16 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
             # get the inputs; data is a list of [inputs, labels]
             # print(data.shape)
-            inputs, labels = data[0].to(device), data[1].to(device)
+            inputs, labels = get_augmented_batch(data)
             # print(labels)
+            inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()  # shouldn't stay on this step.
             # print("input shape", inputs.shape)
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
+            print(inputs.shape)
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -105,7 +111,43 @@ def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
     return
 
 
-def get_dataloaders(args, display_images=False):
+def get_augmented_batch(data):
+    inputs, labels = data
+    new_images = inputs.clone().detach()
+    new_labels = labels.clone().detach()
+    A_transforms = [
+        [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1), ToTensorV2()],
+        [A.Transpose(p=1), ToTensorV2()],
+        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]
+        # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
+    ]
+
+    for t in A_transforms:
+        t = A.Compose(t)
+        # extend labels by one original batch
+        new_labels = torch.cat((new_labels, labels))
+
+        for sample in inputs:
+            aug = [t(image=channel.numpy())["image"]
+                   for frame in sample
+                   for channel in frame]
+            # print(len(aug))
+            # print(aug[0].shape)
+            aug = torch.stack(aug, dim=1)
+            aug = aug.unsqueeze(2)
+            # print("###")
+            new_images = torch.cat((new_images, aug))
+            # print(new_images.shape)
+
+    # make sure general shape of data is correct
+    assert inputs[0].shape == new_images[0].shape
+    assert new_labels.size(0) == len(A_transforms) * \
+        inputs.size(0) + inputs.size(0)
+
+    return new_images, new_labels
+
+
+def get_dataloaders(args, accept_list):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
@@ -119,15 +161,19 @@ def get_dataloaders(args, display_images=False):
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=28)])
     dataset = DynamicVids(
-        args.input_dir, num_to_sample=50, class_types=args.classes, transform=transform)  # nt working :/
+        args.input_dir, accept_list, class_types=args.classes, transform=transform)  # nt working :/
 
     print("dataset", len(dataset))
 
     # don't think this is the way to do this... needs even percent split to work
     train_split = .8
-    train_size = int(train_split * len(dataset))
-    test_size = int((len(dataset) - train_size) / 2)
-    val_size = int((len(dataset) - train_size) / 2)
+    train_size = math.floor(train_split * len(dataset))
+    test_size = math.ceil((len(dataset) - train_size) / 2)
+    val_size = math.floor((len(dataset) - train_size) / 2)
+    train_size, test_size, val_size = int(
+        train_size), int(test_size), int(val_size)
+
+    assert train_size + val_size + test_size == len(dataset)
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
@@ -137,11 +183,14 @@ def get_dataloaders(args, display_images=False):
 
     if args.weighted_samples:
         sampler = get_weighted_sampler(train_dataset, dataset)
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=args.batch_size, sampler=sampler)
     else:
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=args.batch_size)
 
     return train_dataloader, test_dataloader, val_dataloader
+
 
 def get_weighted_sampler(train_dataset, dataset):
     """
@@ -159,8 +208,10 @@ def get_weighted_sampler(train_dataset, dataset):
 
     return sampler
 
+
 if __name__ == "__main__":
     print("Main")
+
     # going to use the same parser manager for cnn and rnn
     args, _ = make_parser()
 
@@ -170,26 +221,49 @@ if __name__ == "__main__":
     model = CNN_LSTM(num_lstm_layers)
 
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
+
+
     # device = 'cpu'
     print("device", device)
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
+
+
+
+    """
+    we have more segmented cell videos saved on logan then intermediates.
+    best to rerun ornet on raw data, but till discrepancy is resolved this
+    will result in using the 114 samples that Neelima used in the last scipy submit
+    class balance 29, 31, 54
+    """
+    path_to_intermediates = "/data/ornet/gmm_intermediates"
+    accept_list = []
+    for subdir in args.classes:
+        path = os.path.join(path_to_intermediates, subdir)
+        for file in os.listdir(path):
+            if 'normalized' in file:
+                accept_list.append(file.split(".")[0])
+
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
     print("Train_size", len(train_dataloader))
+
+    
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
 
-    if args.save:
-        try:
-            saved_state = torch.load(args.save)
-            model.load_state_dict(saved_state)
-            # how to check soemthing happened..
-            print(type(model))
-        except:
-            # please exit
-            print(
-                "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
-            exit()
+    # if not args.train:
+    #     try:
+    #         saved_state = torch.load(args.save)
+    #         model.load_state_dict(saved_state)
+    #         # how to check soemthing happened..
+    #         print(type(model))
+    #     except:
+    #         # please exit
+    #         print(
+    #             "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
+    #         exit()
 
     if args.test:
         print("Testing")
         test(args, model, test_dataloader, device=device)
+
+# TODO - frame sampling with different batch sizes
