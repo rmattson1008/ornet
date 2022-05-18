@@ -1,3 +1,5 @@
+import os
+import math
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -7,12 +9,16 @@ from torch.nn import CrossEntropyLoss
 
 
 from data_utils import FramePairDataset, RoiTransform
-from models import  BaseCNN, VGG_Model, ResNet18, ResBlock
+from models import BaseCNN, VGG_Model, ResNet18, ResBlock
 from sklearn.metrics import confusion_matrix
 import numpy as np
-from parsing_utils import make_parser 
+from parsing_utils import make_parser
 
 from matplotlib import pyplot as plt
+
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import copy
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -21,53 +27,46 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = Adam(model.parameters())
     optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
-    
-    for epoch in range(epochs):  
+
+    for epoch in range(epochs):
         model.train()
         training_loss = 0.0
         # running_loss = 0.0
-        for data in train_dataloader: 
+        for data in train_dataloader:
             # get the inputs; data is a list of [inputs, labels]
             # print(data.shape)
-            inputs, labels = data[0].to(device), data[1].to(device)
-            inputs = inputs.float() # shouldn't stay on this step. 
+            inputs, labels = get_augmented_batch(data)
+
+            inputs, labels = inputs.to(device), labels.to(device)
+            inputs = inputs.float()  # shouldn't stay on this step.
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
             outputs = model(inputs)
-          
+
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             training_loss += loss.item()
-
-            # TODO goddamit do logits, preds go into 
-            # # print statistics
-            # running_loss += loss.item()
-            # if i % 20 == 19:   
-            #     print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 20:.3f}')
-            #     running_loss = 0.0 # weird to do like this idk. 
-            #     print(inputs.shape)
-
 
         model.eval()
         valid_loss = 0.0
         for inputs, labels in val_dataloader:
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.float() # shouldn't stay on this step. 
+            inputs = inputs.float()  # shouldn't stay on this step.
 
-            pred = model(inputs)
-            loss = criterion(pred, labels)
+            outputs = model(inputs)
+            _, pred = torch.max(outputs.data, 1)
+            loss = criterion(outputs, labels)
             valid_loss += loss.item()
-
 
         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
              \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
 
+        # TODO - stop training when Val drops? val score is wack right now
 
-        #TODO - stop training when Val drops?
     if args.save:
         print(args.save)
         print("Saving model")
@@ -75,9 +74,8 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     return
 
 
-def test(args, model, show_plots=True, device='cpu'):
-    model.eval() #is necessary? 
-
+def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
+    model.eval()  # is necessary?
 
     with torch.no_grad():
         y_true = torch.tensor([]).to(device)
@@ -88,11 +86,10 @@ def test(args, model, show_plots=True, device='cpu'):
             # calculate outputs by running images through the network
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
-            #bad approach?
-            y_pred = torch.cat((y_pred, predicted), 0) 
-            y_true = torch.cat((y_true, labels), 0) 
+            # bad approach?
+            y_pred = torch.cat((y_pred, predicted), 0)
+            y_true = torch.cat((y_true, labels), 0)
 
-    # args.classlist()
     cm = confusion_matrix(y_true.cpu(), y_pred.cpu())
 
     assert len(y_pred) == len(y_true)
@@ -101,74 +98,150 @@ def test(args, model, show_plots=True, device='cpu'):
 
     if show_plots:
         print(args.classes)
-        print(cm) #TODO - make pretty
+        print(cm)  # TODO - make pretty
 
-    #what tf else we doing
     return
 
 
+# TODO - some other weight to lessen the importance of llo in training.
 def get_weighted_sampler(train_dataset, dataset):
     """
     Weighted Random Sampling
     One way to fight class imbalance
     """
     indices = train_dataset.indices
-    y_train = [dataset.targets[i] for i in indices] # Messed up this
-    train_dataset_count = np.array([len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
+    y_train = [dataset.targets[i] for i in indices]  # Messed up this
+    train_dataset_count = np.array(
+        [len(np.where(y_train == t)[0]) for t in np.unique(y_train)])
     weights = 1. / torch.tensor(train_dataset_count, dtype=torch.float)
     weights = weights[y_train]
 
     sampler = WeightedRandomSampler(weights, len(train_dataset))
-    
+
     return sampler
 
 
-def get_dataloaders(args, display_images=False):
+def get_augmented_batch(data):
+    inputs, labels = data
+    new_images = inputs.clone().detach()
+    new_labels = labels.clone().detach()
+    A_transforms = [
+        [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1), ToTensorV2()],
+        [A.Transpose(p=1), ToTensorV2()],
+        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]
+        # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
+    ]
+
+    for t in A_transforms:
+        t = A.Compose(t)
+        # extend labels by one original batch
+        new_labels = torch.cat((new_labels, labels))
+
+        for sample in inputs:
+            aug = [t(image=channel.numpy())["image"]
+                   for channel in sample]
+            aug = torch.stack(aug, dim=1)
+            new_images = torch.cat((new_images, aug))
+
+    # make sure general shape of data is correct
+    assert inputs[0].shape == new_images[0].shape
+    assert new_labels.size(0) == len(A_transforms) * inputs.size(0) + inputs.size(0)
+
+    return new_images, new_labels
+
+
+def get_dataloaders(args, accept_list, resize=28):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
     """
 
-
     if args.roi:
         print("Using ROI inputs")
         # default interpolation is bilinear, no idea if there is better choice
-        transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
+        transform = transforms.Compose(
+            [RoiTransform(window_size=(28, 28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
-        print("!!!!! using 224x224")
-        # transform = transforms.Compose([transforms.Resize(size=28)])
-        transform = transforms.Compose([transforms.Resize(size=224)])
+        transform = transforms.Compose([transforms.Resize(size=resize)])
+        # print("!!!!! using 224x224")
+        # transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
-    dataset = FramePairDataset(args.input_dir, class_types=args.classes, transform=transform)
+    # dataset = FramePairDataset(args.input_dir, class_types=args.classes)
+    dataset = FramePairDataset(
+        args.input_dir, accept_list=accept_list, class_types=args.classes, transform=transform)
+    # dataset = augment_dataset(dataset, transform)
 
-    
-    
-    if display_images:
-        # This code is here if you are like me and need to see to believe your data exists
-        for i, ((img, _), __) in enumerate(dataset):
-            if i % 20 == 0:
-                plt.imshow(img)
-                plt.show()
-    
-    ## don't think this is the way to do this... needs even percent split to work
+    assert len(dataset) > 0
+
+    # don't think this is the best way to do this... needs even percent split to work
+    # brittle
     train_split = .8
-    train_size = int(train_split * len(dataset))
-    test_size = int((len(dataset) - train_size) / 2)
-    val_size = int((len(dataset) - train_size) / 2)
+    train_size = math.floor(train_split * len(dataset))
+    test_size = math.ceil((len(dataset) - train_size) / 2)
+    val_size = math.floor((len(dataset) - train_size) / 2)
+    train_size, test_size, val_size = int(
+        train_size), int(test_size), int(val_size)
+
+    assert train_size + val_size + test_size == len(dataset)
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
+    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+        dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
+    # augment images
+    print(len(train_dataset))
+    # train_dataset = augment_dataset(train_dataset, transform)
+    print(len(train_dataset))
+
     if args.weighted_samples:
+        print("using weighted sampling")
         sampler = get_weighted_sampler(train_dataset, dataset)
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler)
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=args.batch_size, sampler=sampler)
     else:
-        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=args.batch_size)
 
     return train_dataloader, test_dataloader, val_dataloader
+
+
+# def get_augmentations():
+
+#     # datasets = []
+
+#     # datasets.append(dataset)
+#     # didnt even include the original transform...
+
+#     albument_Ts = [
+#         [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p = 1), ToTensorV2()],
+#         [A.Transpose(p=1), ToTensorV2()],
+#         [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]
+#         # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
+#     ]
+
+#     # Can't get torch transforms and albumentations transforms to play nicely
+#     torch_Ts = [
+#         transforms.RandomAffine(0, shear = (20,40)),
+#         transforms.RandomAffine(0, shear = (-10,10))
+#         ]
+#     # try some slighter transforms????
+
+#     # for t in albument_Ts:
+#     #     ds = copy.deepcopy(dataset)
+#     #     ds.aug = A.Compose(t)
+#     #     datasets.append(ds)
+
+#     # for t in torch_Ts:
+#     #     ds = copy.deepcopy(dataset)
+#     #     ds.transform = transforms.Compose([base_transform, t])
+#     #     datasets.append(ds)
+
+#     # anyway is making deep copies the best way to do this?
+#     return albument_Ts
+#     # return
 
 
 if __name__ == "__main__":
@@ -177,7 +250,24 @@ if __name__ == "__main__":
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args)
+    """
+    we have more segmented cell videos saved on logan then intermediates.
+    best to rerun ornet on raw data, but till discrepancy is resolved this
+    will result in using the 114 samples that Neelima used in the last scipy submit
+    class balance 29, 31, 54
+    """
+    path_to_intermediates = "/data/ornet/gmm_intermediates"
+    accept_list = []
+    for subdir in args.classes:
+        path = os.path.join(path_to_intermediates, subdir)
+        for file in os.listdir(path):
+            if 'normalized' in file:
+                accept_list.append(file.split(".")[0])
+
+    # train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
+    # if using resnet
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
+        args, accept_list, resize=224)
 
     # model = BaseCNN()
     # model = VGG_Model()
@@ -187,20 +277,18 @@ if __name__ == "__main__":
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
-        
+
     if args.test:
         if not args.train:
             try:
                 saved_state = torch.load(args.save)
                 model.load_state_dict(saved_state)
-                #how to check soemthing happened..
+                # how to check soemthing happened..
                 print(type(model))
             except:
-                #please exit
-                print("Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
+                # please exit
+                print(
+                    "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
                 exit()
         print("Testing")
         test(args, model, test_dataloader, device=device)
-
-
-
