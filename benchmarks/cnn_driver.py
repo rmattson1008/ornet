@@ -67,10 +67,10 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
         # TODO - stop training when Val drops? val score is wack right now
 
-    if args.save:
-        print(args.save)
+    if args.save_as:
+        print(args.save_as)
         print("Saving model")
-        torch.save(model.state_dict(), args.save)
+        torch.save(model.state_dict(),os.path.join(args.save_dir, args.save_as))
     return
 
 
@@ -160,7 +160,7 @@ def get_dataloaders(args, accept_list, resize=28):
         print("Using ROI inputs")
         # default interpolation is bilinear, no idea if there is better choice
         transform = transforms.Compose(
-            [RoiTransform(window_size=(28, 28)), transforms.Resize(size=224)])
+            [RoiTransform(window_size=(28, 28)), transforms.Resize(size=resize)])
     else:
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=resize)])
@@ -185,7 +185,7 @@ def get_dataloaders(args, accept_list, resize=28):
 
     assert train_size + val_size + test_size == len(dataset)
 
-    # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
+    # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed())
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
         dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)

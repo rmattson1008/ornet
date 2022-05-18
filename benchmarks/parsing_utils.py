@@ -87,7 +87,7 @@ def make_parser(default_config_files=[".my_settings"]):
     ) 
 
     parser.add_argument(
-            "--save",
+            "--save_as",
             type=str,
             default="",
             metavar="s",
@@ -96,7 +96,7 @@ def make_parser(default_config_files=[".my_settings"]):
 
     # args.root_dir = args.root_path if args.root_path[-1] == "/" else f"{args.root_path}/" 
     args = parser.parse_known_args()[0]
-    if args.save:
-        args.save = os.path.join(args.root_dir, args.save) # TODO - do u need to create folder?  
+    # if args.save_as:
+        # args.save_as = os.path.join(args.root_dir, args.save) # TODO - do u need to create folder?  
 
     return args, parser
