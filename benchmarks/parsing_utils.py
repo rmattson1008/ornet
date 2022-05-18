@@ -54,6 +54,14 @@ def make_parser(default_config_files=[".my_settings"]):
     )
 
     parser.add_argument(
+        "--sequence",
+        type=int,
+        default=10,
+        metavar="s",
+        help="length of sequence for LSTM input",
+    )
+
+    parser.add_argument(
         "--classes",
         type=list,
         default=['control', 'mdivi', 'llo'],

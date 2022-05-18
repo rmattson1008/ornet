@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
+from torch.nn import Linear, ReLU, LeakyReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d
 
 
 # 2 blocks, expands feature maps immediately and has 2 linear layers
@@ -48,12 +48,12 @@ class CNN_LSTM(Module):
         self.cnn_layers = Sequential(
             Conv2d(1, 4, 3, padding=1),
             BatchNorm2d(4),
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(2, stride=2),
             # Convolution 2
             Conv2d(4, 4, 3, padding=1),
             BatchNorm2d(4),
-            ReLU(inplace=True),
+            LeakyReLU(inplace=True),
             MaxPool2d(2, stride=2)
         )
         cnn_representation_size = 4 * 7 * 7
@@ -73,7 +73,7 @@ class CNN_LSTM(Module):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
             frames = self.cnn_layers(x[:, t, :, :, :])
             frames = torch.flatten(frames, start_dim=1)
-            out, hidden_state = self.lstm(frames, hidden_state)
+            out, hidden_state = self.lstm(frames, hidden_state) # ???? this make no sense tbh
             # we are not saving the sequence of hidden states for one sample
             # nor are we sharing hidden states over batches
 

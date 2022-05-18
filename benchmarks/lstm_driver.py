@@ -28,12 +28,12 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
     model.to(device)
     for epoch in range(epochs):
-        print("Epoch", epoch + 1)
+        # print("Epoch", epoch + 1)
         model.train()
         training_loss = 0.0
 
         for i, data in enumerate(train_dataloader):
-            print("training on", i)
+            # print("training on", i)
             # if i % 30 == 0:
 
             # get the inputs; data is a list of [inputs, labels]
@@ -47,7 +47,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             # zero the parameter gradients
             optimizer.zero_grad()
 
-            print(inputs.shape)
+            # print(inputs.shape)
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -161,7 +161,7 @@ def get_dataloaders(args, accept_list):
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=28)])
     dataset = DynamicVids(
-        args.input_dir, accept_list, class_types=args.classes, transform=transform)  # nt working :/
+        args.input_dir, accept_list, num_to_sample=args.sequence, class_types=args.classes, transform=transform)  # nt working :/
 
     print("dataset", len(dataset))
 
@@ -174,6 +174,7 @@ def get_dataloaders(args, accept_list):
         train_size), int(test_size), int(val_size)
 
     assert train_size + val_size + test_size == len(dataset)
+    # print("Train_size", train_size)
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
@@ -189,6 +190,7 @@ def get_dataloaders(args, accept_list):
         train_dataloader = DataLoader(
             train_dataset, batch_size=args.batch_size)
 
+    # print("Train_size", len(train_dataloader))
     return train_dataloader, test_dataloader, val_dataloader
 
 
@@ -215,10 +217,10 @@ if __name__ == "__main__":
     # going to use the same parser manager for cnn and rnn
     args, _ = make_parser()
 
-    num_lstm_layers = 200  # too many?
+    # num_lstm_layers = 10  # too many?
     # lstm_hidden_size = -1 # if we decide to have a different hidden space size then must add param to model
 
-    model = CNN_LSTM(num_lstm_layers)
+    model = CNN_LSTM(args.sequence)
 
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
 
@@ -243,7 +245,7 @@ if __name__ == "__main__":
                 accept_list.append(file.split(".")[0])
 
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
-    print("Train_size", len(train_dataloader))
+    # print("Train_size", len(train_dataloader))
 
     
     if args.train:
