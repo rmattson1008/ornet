@@ -202,7 +202,7 @@ def get_deep_features( args, models, loaders=[], device="cpu"):
             df['label'] = labels
             frames.append(df)
     final_df = pd.concat(frames)
-    print(final_df)
+    # print(final_df)
         
     return final_df
 
