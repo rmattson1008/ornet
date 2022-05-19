@@ -118,6 +118,8 @@ class ResBlock(nn.Module):
 class ResNet18(nn.Module):
     def __init__(self, in_channels, resblock, outputs=1000):
         super().__init__()
+        self.rep_out = OrderedDict()
+
         self.layer0 = nn.Sequential(
             nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
@@ -147,7 +149,19 @@ class ResNet18(nn.Module):
         )
 
         self.gap = torch.nn.AdaptiveAvgPool2d(1)
-        self.fc = torch.nn.Linear(512, outputs)
+        # self.fc = torch.nn.Linear(512, outputs)
+
+        self.final_rep_layer = Linear(512, 10)
+        self.fc = Linear(10,outputs)
+
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embedding10"))
+        # probably dont need self.hook... 
+
+
+    def forward_hook(self, layer_name):
+        def hook(module, input, output):
+            self.rep_out[layer_name] = output
+        return hook
 
     def forward(self, input):
         input = self.layer0(input)
@@ -158,6 +172,7 @@ class ResNet18(nn.Module):
         input = self.gap(input)
         # input = torch.flatten(input)
         input = input.view(input.size(0), -1)
+        input = self.final_rep_layer(input)
         input = self.fc(input)
 
-        return input
+        return input, self.rep_out
