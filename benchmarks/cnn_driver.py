@@ -10,7 +10,7 @@ import pickle
 
 
 from data_utils import FramePairDataset, RoiTransform
-from models import  BaseCNN, VGG_Model
+from models import  BaseCNN, VGG_Model, ResNet18, ResBlock
 from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser 
@@ -35,7 +35,6 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             # print(data.shape)
             inputs, labels = data[0].to(device), data[1].to(device)
             inputs = inputs.float() # shouldn't stay on this step. 
-
             # zero the parameter gradients
             optimizer.zero_grad()
 
@@ -46,6 +45,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             optimizer.step()
             training_loss += loss.item()
 
+            # TODO goddamit do logits, preds go into 
             # # print statistics
             # running_loss += loss.item()
             # if i % 20 == 19:   
@@ -136,10 +136,13 @@ def get_dataloaders(args, whitelist, display_images=False):
 
     if args.roi:
         print("Using ROI inputs")
-        transform = transforms.Compose([RoiTransform(window_size=(28,28))])
+        # default interpolation is bilinear, no idea if there is better choice
+        transform = transforms.Compose([RoiTransform(window_size=(28,28)), transforms.Resize(size=224)])
     else:
         print("Using global image inputs")
-        transform = transforms.Compose([transforms.Resize(size=28)])
+        print("!!!!! using 224x224")
+        # transform = transforms.Compose([transforms.Resize(size=28)])
+        transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
     dataset = FramePairDataset(args.input_dir, whitelist = whitelist, class_types=args.classes, transform=transform)
     assert len(dataset) > 0
@@ -219,8 +222,9 @@ if __name__ == "__main__":
 
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, whitelist)
 
-    model = BaseCNN()
+    # model = BaseCNN()
     # model = VGG_Model()
+    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
 
     if args.train:
