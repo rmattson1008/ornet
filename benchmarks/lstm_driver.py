@@ -178,7 +178,7 @@ def get_dataloaders(args, accept_list):
 
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(69))
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(69))
+        dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(73))
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
