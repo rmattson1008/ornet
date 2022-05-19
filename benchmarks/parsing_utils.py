@@ -87,7 +87,7 @@ def make_parser(default_config_files=[".my_settings"]):
     ) 
 
     parser.add_argument(
-            "--save_as",
+            "--save_model",
             type=str,
             default="",
             metavar="s",
@@ -95,7 +95,15 @@ def make_parser(default_config_files=[".my_settings"]):
         )
 
     parser.add_argument(
-        "--get_features",
+        "--save_features",
+        type=str,
+        default="",
+        metavar="s",
+        help="saves hooked features to given filepath",
+    )
+
+    parser.add_argument(
+        "--save_losses",
         type=str,
         default="",
         metavar="s",
