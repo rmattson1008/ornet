@@ -15,6 +15,7 @@ import numpy as np
 from parsing_utils import make_parser
 
 from matplotlib import pyplot as plt
+import pickle
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -27,6 +28,9 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = Adam(model.parameters())
     optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
+
+    train_losses = []
+    val_losses = []
 
     for epoch in range(epochs):
         model.train()
@@ -50,6 +54,14 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             optimizer.step()
             training_loss += loss.item()
 
+            # TODO goddamit do logits, preds go into
+            # # print statistics
+            # running_loss += loss.item()
+            # if i % 20 == 19:
+            #     print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 20:.3f}')
+            #     running_loss = 0.0 # weird to do like this idk.
+            #     print(inputs.shape)
+
         model.eval()
         valid_loss = 0.0
         for inputs, labels in val_dataloader:
@@ -67,22 +79,33 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
 
         # TODO - stop training when Val drops? val score is wack right now
 
+        train_losses.append(training_loss / len(train_dataloader))
+        val_losses.append(valid_loss / len(val_dataloader))
+
     if args.save_as:
         print(args.save_as)
         print("Saving model")
         torch.save(model.state_dict(),os.path.join(args.save_dir, args.save_as))
+
+        print("saving loss plots")
+        path = "/home/rachel/ornet/losses/l1.pkl"
+        plot_dict = {"train_loss": train_losses, "val_loss": val_losses}
+        with open(path, "wb") as tf:
+            pickle.dump(plot_dict,tf)
+        
     return
 
 
-def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
+def test(args, model, show_plots=True, device='cpu'):
     model.eval()  # is necessary?
 
+
     with torch.no_grad():
-        y_true = torch.tensor([]).to(device)
-        y_pred = torch.tensor([]).to(device)
+        y_true=torch.tensor([]).to(device)
+        y_pred=torch.tensor([]).to(device)
         for images, labels in test_dataloader:
-            images, labels = images.to(device), labels.to(device)
-            images = images.float()
+            images, labels=images.to(device), labels.to(device)
+            images=images.float()
             # calculate outputs by running images through the network
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
@@ -93,7 +116,7 @@ def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
     cm = confusion_matrix(y_true.cpu(), y_pred.cpu())
 
     assert len(y_pred) == len(y_true)
-    accuracy = (y_true == y_pred).sum() / len(y_true)
+    accuracy=(y_true == y_pred).sum() / len(y_true)
     print("Accuracy:", accuracy)
 
     if show_plots:
@@ -152,7 +175,7 @@ def get_augmented_batch(data):
 
 def get_dataloaders(args, accept_list, resize=28):
     """
-    Access ornet dataset, apply any necessary transformations to images, 
+    Access ornet dataset, apply any necessary transformations to images,
     split into train/test/validate, and return dataloaders
     """
 
@@ -246,9 +269,9 @@ def get_dataloaders(args, accept_list, resize=28):
 
 if __name__ == "__main__":
 
-    args, _ = make_parser()
-    device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
-    device = torch.device(device)
+    args, _=make_parser()
+    device='cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
+    device=torch.device(device)
 
     """
     we have more segmented cell videos saved on logan then intermediates.
@@ -271,7 +294,7 @@ if __name__ == "__main__":
 
     # model = BaseCNN()
     # model = VGG_Model()
-    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    model=ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
 
     if args.train:
@@ -281,7 +304,7 @@ if __name__ == "__main__":
     if args.test:
         if not args.train:
             try:
-                saved_state = torch.load(args.save)
+                saved_state=torch.load(args.save)
                 model.load_state_dict(saved_state)
                 # how to check soemthing happened..
                 print(type(model))
