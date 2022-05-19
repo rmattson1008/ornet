@@ -16,6 +16,8 @@ import numpy as np
 from parsing_utils import make_parser 
 
 from matplotlib import pyplot as plt
+import pandas as pd
+
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -185,20 +187,24 @@ def get_deep_features( args, models, loaders=[], device="cpu"):
     print("Getting deep features")
     feature_dict = {"control":[], "mdivi":[],"llo": []}
     model.eval()
+    # l = np.array()
+    frames = []
     for loader in loaders:
         for inputs, labels in loader:
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()
             outputs, features = model(inputs)
-            if args.batch_size > 1:
-                for i, feat in enumerate(features):
-                    class_name = args.classes[labels[i].item()]
-                    feature_dict[class_name].append(feat)
-            else:
-                feature_dict[args.classes[labels.item()]].append(features)
-            #TODO - keep track of name of sample?
+
+            labels = labels.cpu().detach().numpy()
+            features = features['embeddings10'].cpu().detach().numpy()
+
+            df = pd.DataFrame(features)
+            df['label'] = labels
+            frames.append(df)
+    final_df = pd.concat(frames)
+    print(final_df)
         
-    return feature_dict
+    return final_df
 
 
 if __name__ == "__main__":
@@ -250,11 +256,11 @@ if __name__ == "__main__":
         # make sure handle exists. 
         # TODO - make sure model is in correct state
         loaders = [train_dataloader, test_dataloader, val_dataloader]
-        feature_dict = get_deep_features(args, model, loaders, device=device)
+        df = get_deep_features(args, model, loaders, device=device)
         # TODO - test deep features method
         # save_path="/home/rachel/representations/cnn/BaseCnn_embeddings10_roi.pkl"
         save_path = args.get_features
     
         with open(save_path, 'wb') as f:
-            pickle.dump(feature_dict, f)
+            pickle.dump(df, f)
 

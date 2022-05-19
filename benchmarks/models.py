@@ -154,7 +154,7 @@ class ResNet18(nn.Module):
         self.final_rep_layer = Linear(512, 10)
         self.fc = Linear(10,outputs)
 
-        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embedding10"))
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embeddings10"))
         # probably dont need self.hook... 
 
 
