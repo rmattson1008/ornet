@@ -11,5 +11,7 @@ htmlcov
 **.pyc
 **.DS_Store
 helper.py
+*.pkl
+*.pth
 
 .ipynb_checkpoints
