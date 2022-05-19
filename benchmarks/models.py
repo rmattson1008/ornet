@@ -1,4 +1,6 @@
+from typing import OrderedDict
 import torch
+from collections import OrderedDict 
 import torch.nn as nn
 from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d, LeakyReLU
 
@@ -9,7 +11,8 @@ class BaseCNN(Module):
 
     def __init__(self):
         super().__init__()
-
+        self.rep_out = OrderedDict()
+        # self.hooks = [] # only taking 1 hook at final layer
 
         self.cnn_layers = Sequential(
             # Convolution 1
@@ -25,20 +28,28 @@ class BaseCNN(Module):
             LeakyReLU(inplace=True),
             MaxPool2d(3, stride=1)
         )
+        #TODO check expansion
 
         # should be length of unwound channels * feature map dims
-        db_size = 4 * 20 * 20
-        # one layer to classify
-        self.linear_layers = Sequential(
-            Linear(db_size, 10),
-            Linear(10,3))
+        cnn_out_size = 4 * 20 * 20
+        
+        self.final_rep_layer = Linear(cnn_out_size, 10)
+        self.fc = Linear(10,3)
 
+       
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embedding10"))
+
+    def forward_hook(self, layer_name):
+        def hook(module, input, output):
+            self.rep_out[layer_name] = output
+        return hook
 
     def forward(self, x):
         x = self.cnn_layers(x)
         x = x.view(x.size(0), -1)
-        x = self.linear_layers(x)
-        return x
+        x = self.final_rep_layer(x)
+        x = self.fc(x)
+        return x, self.rep_out
 
 
 
@@ -107,6 +118,8 @@ class ResBlock(nn.Module):
 class ResNet18(nn.Module):
     def __init__(self, in_channels, resblock, outputs=1000):
         super().__init__()
+        self.rep_out = OrderedDict()
+
         self.layer0 = nn.Sequential(
             nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
@@ -136,7 +149,19 @@ class ResNet18(nn.Module):
         )
 
         self.gap = torch.nn.AdaptiveAvgPool2d(1)
-        self.fc = torch.nn.Linear(512, outputs)
+        # self.fc = torch.nn.Linear(512, outputs)
+
+        self.final_rep_layer = Linear(512, 10)
+        self.fc = Linear(10,outputs)
+
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embeddings10"))
+        # probably dont need self.hook... 
+
+
+    def forward_hook(self, layer_name):
+        def hook(module, input, output):
+            self.rep_out[layer_name] = output
+        return hook
 
     def forward(self, input):
         input = self.layer0(input)
@@ -147,6 +172,7 @@ class ResNet18(nn.Module):
         input = self.gap(input)
         # input = torch.flatten(input)
         input = input.view(input.size(0), -1)
+        input = self.final_rep_layer(input)
         input = self.fc(input)
 
-        return input
+        return input, self.rep_out

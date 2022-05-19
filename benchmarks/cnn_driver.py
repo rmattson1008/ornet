@@ -6,6 +6,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 from torch.optim import Adam, SGD
 from torch.nn import CrossEntropyLoss
+import pickle
 
 
 from data_utils import FramePairDataset, RoiTransform
@@ -20,6 +21,8 @@ import pickle
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import copy
+import pandas as pd
+
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -35,6 +38,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     for epoch in range(epochs):
         model.train()
         training_loss = 0.0
+        hooks = []
         # running_loss = 0.0
         for data in train_dataloader:
             # get the inputs; data is a list of [inputs, labels]
@@ -47,8 +51,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            outputs = model(inputs)
-
+            outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -69,9 +72,8 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()  # shouldn't stay on this step.
 
-            outputs = model(inputs)
-            _, pred = torch.max(outputs.data, 1)
-            loss = criterion(outputs, labels)
+            pred, _ = model(inputs)
+            loss = criterion(pred, labels)
             valid_loss += loss.item()
 
         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
@@ -107,7 +109,7 @@ def test(args, model, show_plots=True, device='cpu'):
             images, labels=images.to(device), labels.to(device)
             images=images.float()
             # calculate outputs by running images through the network
-            outputs = model(images)
+            outputs, _ = model(images)
             _, predicted = torch.max(outputs.data, 1)
             # bad approach?
             y_pred = torch.cat((y_pred, predicted), 0)
@@ -230,6 +232,29 @@ def get_dataloaders(args, accept_list, resize=28):
 
     return train_dataloader, test_dataloader, val_dataloader
 
+def get_deep_features( args, models, loaders=[], device="cpu"):
+    print("Getting deep features")
+    feature_dict = {"control":[], "mdivi":[],"llo": []}
+    model.eval()
+    # l = np.array()
+    frames = []
+    for loader in loaders:
+        for inputs, labels in loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            inputs = inputs.float()
+            outputs, features = model(inputs)
+
+            labels = labels.cpu().detach().numpy()
+            features = features['embeddings10'].cpu().detach().numpy()
+
+            df = pd.DataFrame(features)
+            df['label'] = labels
+            frames.append(df)
+    final_df = pd.concat(frames)
+    # print(final_df)
+        
+    return final_df
+
 
 # def get_augmentations():
 
@@ -283,14 +308,10 @@ if __name__ == "__main__":
     accept_list = []
     for subdir in args.classes:
         path = os.path.join(path_to_intermediates, subdir)
-        for file in os.listdir(path):
-            if 'normalized' in file:
-                accept_list.append(file.split(".")[0])
+        files = os.listdir(path)
+        accept_list.extend([x.split(".")[0] for x in files if 'normalized' in x])
 
-    # train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
-    # if using resnet
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-        args, accept_list, resize=224)
+    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, whitelist)
 
     # model = BaseCNN()
     # model = VGG_Model()
@@ -315,3 +336,17 @@ if __name__ == "__main__":
                 exit()
         print("Testing")
         test(args, model, test_dataloader, device=device)
+
+    # get features from final model. 
+    if args.get_features:
+        # make sure handle exists. 
+        # TODO - make sure model is in correct state
+        loaders = [train_dataloader, test_dataloader, val_dataloader]
+        df = get_deep_features(args, model, loaders, device=device)
+        # TODO - test deep features method
+        # save_path="/home/rachel/representations/cnn/BaseCnn_embeddings10_roi.pkl"
+        save_path = args.get_features
+    
+        with open(save_path, 'wb') as f:
+            pickle.dump(df, f)
+
