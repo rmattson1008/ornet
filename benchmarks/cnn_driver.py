@@ -178,18 +178,21 @@ def get_dataloaders(args, whitelist, display_images=False):
 
     return train_dataloader, test_dataloader, val_dataloader
 
-def get_deep_features(model, loaders=[], device="cpu"):
+def get_deep_features( args, models, loaders=[], device="cpu"):
     print("Getting deep features")
     feature_dict = {"control":[], "mdivi":[],"llo": []}
     model.eval()
     for loader in loaders:
-        #TODO does this work when batched
         for inputs, labels in loader:
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()
             outputs, features = model(inputs)
-            feature_dict[args.classes[labels.item()]].append(features)
-            # feature_dict[str(labels.item())].append(features)
+            if args.batch_size > 1:
+                for i, feat in enumerate(features):
+                    class_name = args.classes[labels[i].item()]
+                    feature_dict[class_name].append(feat)
+            else:
+                feature_dict[args.classes[labels.item()]].append(features)
             #TODO - keep track of name of sample?
         
     return feature_dict
@@ -239,12 +242,15 @@ if __name__ == "__main__":
         test(args, model, test_dataloader, device=device)
 
     # get features from final model. 
-    if 1 == 1:
+    if args.get_features:
         # make sure handle exists. 
         # TODO - make sure model is in correct state
         loaders = [train_dataloader, test_dataloader, val_dataloader]
-        feature_dict = get_deep_features(model, loaders, device=device)
+        feature_dict = get_deep_features(args, model, loaders, device=device)
         # TODO - test deep features method
-        save_path="/home/rachel/representations/cnn/BaseCnn_embeddings10_roi.pkl"
+        # save_path="/home/rachel/representations/cnn/BaseCnn_embeddings10_roi.pkl"
+        save_path = args.get_features
+    
         with open(save_path, 'wb') as f:
             pickle.dump(feature_dict, f)
+

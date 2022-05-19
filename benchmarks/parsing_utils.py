@@ -94,6 +94,14 @@ def make_parser(default_config_files=[".my_settings"]):
             help="saves the weights to a given filepath",
         )
 
+    parser.add_argument(
+        "--get_features",
+        type=str,
+        default="",
+        metavar="s",
+        help="saves hooked features to given filepath",
+    )
+
     # args.root_dir = args.root_path if args.root_path[-1] == "/" else f"{args.root_path}/" 
     args = parser.parse_known_args()[0]
     if args.save:
