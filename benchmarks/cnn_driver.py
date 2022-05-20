@@ -24,6 +24,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import copy
 import pandas as pd
+import random
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -42,6 +43,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         training_loss = 0.0
         for data in train_dataloader:
             inputs, labels = get_augmented_batch(data)
+            # inputs, labels = data
 
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()  # shouldn't stay on this step.
@@ -167,6 +169,7 @@ def get_augmented_batch(data):
         # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
     ]
 
+    random.seed(73)
     for t in A_transforms:
         t = A.Compose(t)
         # extend labels by one original batch
@@ -279,6 +282,14 @@ if __name__ == "__main__":
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
+
+    # throwing kitchen sink of deterministic p.
+    # SGD is obv stochastic.... no way to seed? 
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
+    torch.manual_seed(73)
+    if device =='cuda':
+        torch.cuda.manual_seed_all(73)
 
     """
     we have more segmented cell videos saved on logan then intermediates.
