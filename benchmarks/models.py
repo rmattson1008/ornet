@@ -37,7 +37,7 @@ class BaseCNN(Module):
         self.fc = Linear(10,3)
 
        
-        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embedding10"))
+        self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embeddings10"))
 
     def forward_hook(self, layer_name):
         def hook(module, input, output):
