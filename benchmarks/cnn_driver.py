@@ -247,15 +247,15 @@ def get_dataloaders(args, accept_list, resize=224):
     return train_dataloader, test_dataloader, val_dataloader
 
 
-def get_deep_features(args, model, loaders=[] ,device="cpu"):
+def get_deep_features(args, model, loader_dict, device="cpu"):
     print("Getting deep features")
     checkpoint = torch.load(args.save_model)
     model.load_state_dict(checkpoint['state_dict'])
     print("best performance at epoch", checkpoint['epoch'])
 
     model.eval()
-    frames = []
-    for loader in loaders:
+    for (name, loader) in loader_dict.items():
+        frames = []
         for inputs, labels in loader:
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()
@@ -267,11 +267,11 @@ def get_deep_features(args, model, loaders=[] ,device="cpu"):
             df = pd.DataFrame(features)
             df['label'] = labels
             frames.append(df)
-    final_df = pd.concat(frames)
-    save_path = args.save_features
+        final_df = pd.concat(frames)
+        save_path = args.save_features.split(".")[0] + name + "." + args.save_features.split(".")[1]
 
-    with open(save_path, 'wb') as f:
-        pickle.dump(final_df, f)
+        with open(save_path, 'wb') as f:
+            pickle.dump(final_df, f)
 
     return final_df
 
@@ -282,11 +282,12 @@ if __name__ == "__main__":
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
+    print(device)
 
     # throwing kitchen sink of deterministic p.
     # SGD is obv stochastic.... no way to seed? 
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.benchmark = False
+    # torch.use_deterministic_algorithms(True)
+    # torch.backends.cudnn.benchmark = False
     torch.manual_seed(73)
     if device =='cuda':
         torch.cuda.manual_seed_all(73)
@@ -312,6 +313,7 @@ if __name__ == "__main__":
     # model = VGG_Model()
     model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
     model.to(device)
+    #TODO - ensure save_model exists
 
     if args.train:
         print("Training")
@@ -326,5 +328,8 @@ if __name__ == "__main__":
 
     # get features from final model.
     if args.save_features:
-        get_deep_features(args, model, [train_dataloader, test_dataloader, val_dataloader], device=device)
+        loader_dict = {
+            "train": train_dataloader, "test": test_dataloader, "val" : val_dataloader
+        }
+        get_deep_features(args, model, loader_dict, device=device)
     
