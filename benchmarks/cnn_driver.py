@@ -8,7 +8,6 @@ from torch.optim import Adam, SGD
 from torch.nn import CrossEntropyLoss
 import pickle
 
-
 from data_utils import FramePairDataset, RoiTransform
 from models import BaseCNN, VGG_Model, ResNet18, ResBlock
 from sklearn.metrics import confusion_matrix
@@ -254,7 +253,8 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
     print("best performance at epoch", checkpoint['epoch'])
 
     model.eval()
-    for (name, loader) in loader_dict.items():
+    feature_dict = {}
+    for (loader_name, loader) in loader_dict.items():
         frames = []
         for inputs, labels in loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -268,12 +268,13 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
             df['label'] = labels
             frames.append(df)
         final_df = pd.concat(frames)
-        save_path = args.save_features.split(".")[0] + name + "." + args.save_features.split(".")[1]
+        feature_dict[loader_name] = final_df
+        # save_path = args.save_features.split(".")[0] + name + "." + args.save_features.split(".")[1]
 
-        with open(save_path, 'wb') as f:
-            pickle.dump(final_df, f)
+    with open(args.save_features, 'wb') as f:
+        pickle.dump(feature_dict, f)
 
-    return final_df
+    return feature_dict
 
 
 
