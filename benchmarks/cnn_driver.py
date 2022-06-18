@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
+import torchvision
 from torch.optim import Adam, SGD
 from torch.nn import CrossEntropyLoss
 import pickle
@@ -24,6 +25,7 @@ from albumentations.pytorch import ToTensorV2
 import copy
 import pandas as pd
 import random
+from torch.utils.tensorboard import SummaryWriter
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
@@ -32,6 +34,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = Adam(model.parameters())
     optimizer = SGD(model.parameters(), lr=lr)
     criterion = CrossEntropyLoss()
+    tb = SummaryWriter()
 
     train_losses = []
     val_losses = []
@@ -40,44 +43,65 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     for epoch in tqdm(range(epochs), desc="epochs"):
         model.train()
         training_loss = 0.0
+        total_correct = 0.0
+        valid_loss = 0.0
         for data in train_dataloader:
-            inputs, labels = get_augmented_batch(data)
-            # inputs, labels = data
+            # inputs, labels = get_augmented_batch(data)
+            images, labels = data
+            # print(images.dtype)
 
-            inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.float()  # shouldn't stay on this step.
+            inputs, labels = images.to(device), labels.to(device)
+            # inputs = inputs.float()  # shouldn't stay on this step.
+            # inputs = inputs.to(torch.float32)  # shouldn't stay on this step.
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
+            # print(inputs.shape)
+            # print(inputs.dtype)
             # print(inputs.shape)
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             training_loss += loss.item()
+            total_correct+= outputs.argmax(dim=1).eq(labels).sum().item()
 
         model.eval()
-        valid_loss = 0.0
+        
         for inputs, labels in val_dataloader:
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.float()  # shouldn't stay on this step.
+            # inputs = inputs.float()  # shouldn't stay on this step.
             pred, _ = model(inputs)
             loss = criterion(pred, labels)
-            valid_loss += loss.item()
+            valid_loss += loss.item() 
+            
 
         # print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
             # \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
 
         val_loss_epoch = valid_loss / len(val_dataloader)
         train_loss_epoch = training_loss / len(train_dataloader)
+        accuracy = total_correct / len(train_dataloader)
 
         train_losses.append(train_loss_epoch)
         val_losses.append(val_loss_epoch)
 
+        total_correct = sum(pred == labels)
+
+        #todo - save value over batch?
+        tb.add_scalar("TrainLoss", training_loss, epoch)
+        tb.add_scalar("ValLoss", valid_loss, epoch)
+        # tb.add_scalar("Correct", total_correct, epoch)
+        # print(accuracy.shape)
+        tb.add_scalar("Accuracy", accuracy, epoch)
+        # print(model.named_parameters())
+        for name, weight in model.named_parameters():
+            tb.add_histogram(name,weight, epoch)
+            tb.add_histogram(f'{name}.grad',weight.grad, epoch)
         # print(np.min(val_losses))
-        if val_loss_epoch == np.min(val_losses):
+        if val_loss_epoch == np.min(val_losses) and args.save_model:
             # print("Saving model")
             torch.save(
                 {'epoch': epoch + 1,
@@ -91,6 +115,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         path = args.save_losses
         with open(path, "wb") as tf:
             pickle.dump(plot_dict, tf)
+    tb.close()
     return
     # todo - move this down and clean up args
     # if args.save_model:
@@ -202,6 +227,7 @@ def get_dataloaders(args, accept_list, resize=224):
     else:
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=resize)])
+        # transform = []
         # print("!!!!! using 224x224")
         # transform = transforms.Compose([transforms.Resize(size=224)])
     # TODO - normalize??
@@ -284,6 +310,7 @@ if __name__ == "__main__":
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
     print(device)
+    # tb = SummaryWriter()
 
     # throwing kitchen sink of deterministic p.
     # SGD is obv stochastic.... no way to seed? 
@@ -310,18 +337,42 @@ if __name__ == "__main__":
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
         args, accept_list, resize=212)
 
+    
+
     # model = BaseCNN()
     # model = VGG_Model()
     model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
-    model.to(device)
-    #TODO - ensure save_model exists
 
+
+
+    # images, labels = next(iter(train_dataloader))
+    # print("got image batch from laoder")
+    # images = transforms.ToPILImage()(images)
+
+    # # images = images.astype('uint8')
+    # grid = torchvision.utils.make_grid(images)  
+    # print("made grid")
+    # tb.add_image("images", grid)
+    # print("added image grid to tb")
+    # print(type(images))
+    # print(images.shape)
+    # # images = images.numpy()
+    # print(type(images))
+
+    # images = transforms.ToPILImage()(images)
+    # I dont think the two channel images play well with add_graph
+    # tb.add_graph(model)
+    # print("added model graph to tb")
+    # tb.close()
+
+    model.to(device)
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
     else:
-        checkpoint = torch.load(args.save_model)
-        model.load_state_dict(checkpoint['state_dict'])
+        pass
+        # checkpoint = torch.load(args.save_model)
+        # model.load_state_dict(checkpoint['state_dict'])
 
     if args.test:
         print("Testing")

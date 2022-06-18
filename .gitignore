@@ -13,4 +13,4 @@ htmlcov
 helper.py
 *.pkl
 *.pth
-
+events.*

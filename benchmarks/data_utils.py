@@ -51,11 +51,15 @@ class FramePairDataset(Dataset):
         sample = vid[0:2]
         assert sample.shape == (2,512,512) 
 
+        # TODO - will probably cause error during
         s = torch.as_tensor(sample)
         if self.transform:
-                sample = self.transform(s)
+            # print("calling transform")
+            sample = self.transform(s)
+            # sample = self.transform(sample)
         
-        # sample = torch.as_tensor(sample)
+        sample = torch.as_tensor(sample)
+        sample = sample.float()
         return sample, target_class
 
         #### is it???
