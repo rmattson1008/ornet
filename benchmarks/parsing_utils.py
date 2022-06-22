@@ -27,6 +27,12 @@ def make_parser(default_config_files=[".my_settings"]):
     )
 
     parser.add_argument(
+        '--shuffle', 
+        action='store_true',
+        help='shuffle data',
+    )
+
+    parser.add_argument(
         "--cuda",
         type=int,
         default=-1,
