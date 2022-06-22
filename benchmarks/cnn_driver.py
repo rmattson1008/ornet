@@ -26,113 +26,106 @@ import copy
 import pandas as pd
 import random
 from torch.utils.tensorboard import SummaryWriter
+from itertools import product
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
-    lr = args.lr
+    # lr = args.lr
     epochs = args.epochs
-    # optimizer = Adam(model.parameters())
-    optimizer = SGD(model.parameters(), lr=lr)
+    print("using ADAM")
+    optimizer = Adam(model.parameters(), lr=args.lr)
+    # optimizer = SGD(model.parameters(), lr=args.lr)
     criterion = CrossEntropyLoss()
-    tb = SummaryWriter()
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} test2'
+    tb = SummaryWriter(comment=comment)
 
-    train_losses = []
+    # train_losses = []
     val_losses = []
 
     # for epoch in range(epochs):
     for epoch in tqdm(range(epochs), desc="epochs"):
         model.train()
-        training_loss = 0.0
-        total_correct = 0.0
-        valid_loss = 0.0
-        for data in train_dataloader:
-            # inputs, labels = get_augmented_batch(data)
-            images, labels = data
-            # print(images.dtype)
 
-            inputs, labels = images.to(device), labels.to(device)
-            # inputs = inputs.float()  # shouldn't stay on this step.
-            # inputs = inputs.to(torch.float32)  # shouldn't stay on this step.
+        train_loss = 0.0
+        val_loss = 0.0
+        total_correct = 0.0
+        val_total_correct = 0.0
+        train_acc = 0.0
+        val_acc = 0.0
+        num_batches_used = 0.0 
+
+        for batch_idx, data in enumerate(train_dataloader):
+            inputs, labels = get_augmented_batch(data)
+            inputs, labels = inputs.to(device), labels.to(device)
+        
             # zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            # print(inputs.shape)
-            # print(inputs.dtype)
-            # print(inputs.shape)
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            training_loss += loss.item()
-            total_correct+= outputs.argmax(dim=1).eq(labels).sum().item()
+            train_loss += loss.item()
+            total_correct += outputs.argmax(dim=1).eq(labels).sum().item()
+            real_total_correct = outputs.argmax(dim=1).eq(labels).sum().item()
+            train_acc += real_total_correct / len(labels)
+            num_batches_used = batch_idx + 1
+
+        print(num_batches_used)
+        train_loss = train_loss / num_batches_used
+        train_acc = train_acc / num_batches_used * 100
 
         model.eval()
-        
-        for inputs, labels in val_dataloader:
-            # get the inputs; data is a list of [inputs, labels]
+        num_batches_used = 0.0 
+        for batch_idx, (inputs, labels) in enumerate(val_dataloader):
             inputs, labels = inputs.to(device), labels.to(device)
-            # inputs = inputs.float()  # shouldn't stay on this step.
-            pred, _ = model(inputs)
-            loss = criterion(pred, labels)
-            valid_loss += loss.item() 
-            
+            preds, _ = model(inputs)
+            loss = criterion(preds, labels)
+            val_loss += loss.item()
+            val_total_correct += preds.argmax(dim=1).eq(labels).sum().item()
+            real_val_total_correct = preds.argmax(dim=1).eq(labels).sum().item()
+            val_acc += real_val_total_correct / len(labels)
+            num_batches_used = batch_idx + 1
 
-        # print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
-            # \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
+        val_loss = val_loss / num_batches_used
+        val_acc = val_acc / num_batches_used * 100
+  
 
-        val_loss_epoch = valid_loss / len(val_dataloader)
-        train_loss_epoch = training_loss / len(train_dataloader)
-        accuracy = total_correct / len(train_dataloader)
+        tb.add_scalar("AvgTrainLoss", train_loss, epoch)
+        tb.add_scalar("AvgValLoss", val_loss, epoch)
+        tb.add_scalar("TrainAccuracy", train_acc, epoch)
+        tb.add_scalar("ValAccuracy", val_acc, epoch)
+        tb.add_scalar("TotalCorrect", total_correct, epoch)
+        tb.add_scalar("ValTotalCorrect", val_total_correct, epoch)
 
-        train_losses.append(train_loss_epoch)
-        val_losses.append(val_loss_epoch)
 
-        total_correct = sum(pred == labels)
+        # save the model at lowest val loss score and continue training
+        # the val loss curve is not incredibly smooth so I dont want to risk a local optimum
+        val_losses.append(val_loss)
+        if val_loss == np.min(val_losses):
+            best_accuracy = val_acc
+            if args.save_model:
+                save_path = args.save_model + "_" + str(args.lr) + "_" +str(args.batch_size) + "_" +str(args.shuffle) + "_" +str(args.epochs)  + ".pth"
+                # print("Saving model")
+                torch.save(
+                    {'epoch': epoch + 1,
+                     'state_dict': model.state_dict()},
+                    save_path)
 
-        #todo - save value over batch?
-        tb.add_scalar("TrainLoss", training_loss, epoch)
-        tb.add_scalar("ValLoss", valid_loss, epoch)
-        # tb.add_scalar("Correct", total_correct, epoch)
-        # print(accuracy.shape)
-        tb.add_scalar("Accuracy", accuracy, epoch)
-        # print(model.named_parameters())
-        for name, weight in model.named_parameters():
-            tb.add_histogram(name,weight, epoch)
-            tb.add_histogram(f'{name}.grad',weight.grad, epoch)
-        # print(np.min(val_losses))
-        if val_loss_epoch == np.min(val_losses) and args.save_model:
-            # print("Saving model")
-            torch.save(
-                {'epoch': epoch + 1,
-                 'state_dict': model.state_dict()},
-                args.save_model)
+    tb.add_hparams(
+        {"lr": args.lr, "bsize": args.batch_size, "shuffle": args.shuffle},
+        {
+            # these are score at the end of training, probably overfit.
+            "accuracy": train_acc,
+            "loss": train_loss,
+            # this is from early stop spot
+            "best_accuracy": best_accuracy,
+        },
+    )
 
-    plot_dict = {"train_loss": train_losses, "val_loss": val_losses}
-
-    if args.save_losses:
-        print("saving loss plots")
-        path = args.save_losses
-        with open(path, "wb") as tf:
-            pickle.dump(plot_dict, tf)
     tb.close()
     return
-    # todo - move this down and clean up args
-    # if args.save_model:
-    #     print(args.save_model)
-    #     print("Saving model")
-    #     torch.save(model.state_dict(), os.path.join(
-    #         args.save_dir, args.save_model))
-
-    # if args.save_losses:
-    #     print("saving loss plots")
-    #     path = "/home/rachel/ornet/losses/l2.pkl"
-    #     # path=os.path.join(args.save_losses, args.save_model)
-    #     plot_dict={"train_loss": train_losses, "val_loss": val_losses}
-    #     with open(path, "wb") as tf:
-    #         pickle.dump(plot_dict, tf)
-
-    # return
 
 
 def test(args, model, test_dataloader, show_plots=True, device='cpu'):
@@ -159,7 +152,7 @@ def test(args, model, test_dataloader, show_plots=True, device='cpu'):
 
     if show_plots:
         print(args.classes)
-        print(cm)  # TODO - make pretty
+        print(cm) 
 
     return
 
@@ -183,26 +176,32 @@ def get_weighted_sampler(train_dataset, dataset):
 
 
 def get_augmented_batch(data):
+    """
+    same transformation instance applied to both channels
+    
+    """
     inputs, labels = data
     new_images = inputs.clone().detach()
     new_labels = labels.clone().detach()
     A_transforms = [
-        [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1), ToTensorV2()],
-        [A.Transpose(p=1), ToTensorV2()],
-        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]
-        # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
+        # [A.Sharpen(alpha=(.5, 1.), lightness=(0.1, 0.1), always_apply=True), ToTensorV2()],
+        [A.Emboss(alpha=(0.2, 0.5), strength=(0.2, 0.7), always_apply=True), ToTensorV2()],
+        [A.Superpixels(p_replace=0.1, n_segments=200, max_size=128, interpolation=1, always_apply=True), ToTensorV2()],
+        # [A.Transpose(p=1), ToTensorV2()],
+        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()],
+        [A.RandomRotate90(p=1.0), ToTensorV2()],
+        # [A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=1.0), ToTensorV2()]
     ]
 
-    random.seed(73)
+    # random.seed(73)
     for t in A_transforms:
-        t = A.Compose(t)
+        t = A.Compose(t, additional_targets={'image1': 'image'})
         # extend labels by one original batch
         new_labels = torch.cat((new_labels, labels))
 
         for sample in inputs:
-            aug = [t(image=channel.numpy())["image"]
-                   for channel in sample]
-            aug = torch.stack(aug, dim=1)
+            transformed = t(image=sample[0].numpy(), image1=sample[1].numpy())
+            aug = torch.stack((transformed["image"], transformed["image1"]), dim=1)
             new_images = torch.cat((new_images, aug))
 
     # make sure general shape of data is correct
@@ -215,7 +214,7 @@ def get_augmented_batch(data):
 
 def get_dataloaders(args, accept_list, resize=224):
     """
-    Access ornet dataset, apply any necessary transformations to images,
+    Access ornet dataset, pass any initial transformations to dataset,
     split into train/test/validate, and return dataloaders
     """
 
@@ -227,14 +226,8 @@ def get_dataloaders(args, accept_list, resize=224):
     else:
         print("Using global image inputs")
         transform = transforms.Compose([transforms.Resize(size=resize)])
-        # transform = []
-        # print("!!!!! using 224x224")
-        # transform = transforms.Compose([transforms.Resize(size=224)])
-    # TODO - normalize??
-    # dataset = FramePairDataset(args.input_dir, class_types=args.classes)
     dataset = FramePairDataset(
         args.input_dir, accept_list=accept_list, class_types=args.classes, transform=transform)
-    # dataset = augment_dataset(dataset, transform)
 
     assert len(dataset) > 0
 
@@ -252,22 +245,19 @@ def get_dataloaders(args, accept_list, resize=224):
     # train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed())
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
         dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(73))
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
-
-    # augment images
-    # print(len(train_dataset))
-    # train_dataset = augment_dataset(train_dataset, transform)
-    # print(len(train_dataset))
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=args.batch_size,  shuffle=args.shuffle)
 
     if args.weighted_samples:
         print("using weighted sampling")
         sampler = get_weighted_sampler(train_dataset, dataset)
         train_dataloader = DataLoader(
-            train_dataset, batch_size=args.batch_size, sampler=sampler)
+            train_dataset, batch_size=args.batch_size, sampler=sampler,  shuffle=args.shuffle)
     else:
         train_dataloader = DataLoader(
-            train_dataset, batch_size=args.batch_size)
+            train_dataset, batch_size=args.batch_size, shuffle=args.shuffle)
 
     return train_dataloader, test_dataloader, val_dataloader
 
@@ -303,22 +293,18 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
     return feature_dict
 
 
-
 if __name__ == "__main__":
 
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
     print(device)
-    # tb = SummaryWriter()
 
-    # throwing kitchen sink of deterministic p.
-    # SGD is obv stochastic.... no way to seed? 
-    # torch.use_deterministic_algorithms(True)
-    # torch.backends.cudnn.benchmark = False
-    torch.manual_seed(73)
-    if device =='cuda':
+    # TODO
+    if device == 'cuda':
         torch.cuda.manual_seed_all(73)
+    else:
+        torch.manual_seed(73)
 
     """
     we have more segmented cell videos saved on logan then intermediates.
@@ -334,54 +320,57 @@ if __name__ == "__main__":
         accept_list.extend([x.split(".")[0]
                            for x in files if 'normalized' in x])
 
+    # hyper_parameters = dict(
+    #     # lr=[ 0.0001, 0.00005],
+    #     lr=[ 0.00005],
+    #     batch_size=[16,32, 64],
+    #     # shuffle=[True, False]
+    #     shuffle=[True]
+    # )
+    # param_values = [v for v in hyper_parameters.values()]
+
+    # for lr,batch_size, shuffle in product(*param_values):
+
+    #     print(lr, batch_size, shuffle)
+    #     args.lr = lr
+    #     args.batch_size = batch_size
+    #     args.shuffle = shuffle
+
+    #     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
+    #         args, accept_list, resize=212)
+    #     # model = BaseCNN()
+    #     # model = VGG_Model()
+    #     model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    #     model.to(device)
+    #     print("Training")
+    #     train(args, model, train_dataloader, val_dataloader, device=device)
+
+    # model = BaseCNN()
+    # # model = VGG_Model()
+    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    model.to(device)
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
         args, accept_list, resize=212)
 
-    
-
-    # model = BaseCNN()
-    # model = VGG_Model()
-    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
-
-
-
-    # images, labels = next(iter(train_dataloader))
-    # print("got image batch from laoder")
-    # images = transforms.ToPILImage()(images)
-
-    # # images = images.astype('uint8')
-    # grid = torchvision.utils.make_grid(images)  
-    # print("made grid")
-    # tb.add_image("images", grid)
-    # print("added image grid to tb")
-    # print(type(images))
-    # print(images.shape)
-    # # images = images.numpy()
-    # print(type(images))
-
-    # images = transforms.ToPILImage()(images)
-    # I dont think the two channel images play well with add_graph
-    # tb.add_graph(model)
-    # print("added model graph to tb")
-    # tb.close()
-
-    model.to(device)
     if args.train:
         print("Training")
-        train(args, model, train_dataloader, val_dataloader, device=device)
-    else:
-        pass
         # checkpoint = torch.load(args.save_model)
         # model.load_state_dict(checkpoint['state_dict'])
+        train(args, model, train_dataloader, val_dataloader, device=device)
 
     if args.test:
+        checkpoint = torch.load(args.save_model)
+        model.load_state_dict(checkpoint['state_dict'])
         print("Testing")
+
         test(args, model, test_dataloader, device=device)
 
     # get features from final model.
     if args.save_features:
+        checkpoint = torch.load(args.save_model)
+        model.load_state_dict(checkpoint['state_dict'])
+        print("Getting deep features")
         loader_dict = {
-            "train": train_dataloader, "test": test_dataloader, "val" : val_dataloader
+            "train": train_dataloader, "test": test_dataloader, "val": val_dataloader
         }
         get_deep_features(args, model, loader_dict, device=device)
-    
