@@ -62,7 +62,7 @@ class VGG_Model(Module):
 
 
         self.cnn_layers = Sequential(
-            # BLock 3
+            # BLock 1
             Conv2d(2,64,3,padding=1), 
             LeakyReLU(inplace=True),
             Conv2d(64,128,3,padding=1), 
