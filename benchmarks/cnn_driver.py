@@ -32,11 +32,11 @@ from itertools import product
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # lr = args.lr
     epochs = args.epochs
-    print("using ADAM")
     optimizer = Adam(model.parameters(), lr=args.lr)
     # optimizer = SGD(model.parameters(), lr=args.lr)
+    print(optimizer)
     criterion = CrossEntropyLoss()
-    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} test2'
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} glob_res_adam'
     tb = SummaryWriter(comment=comment)
 
     # train_losses = []
@@ -71,8 +71,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             real_total_correct = outputs.argmax(dim=1).eq(labels).sum().item()
             train_acc += real_total_correct / len(labels)
             num_batches_used = batch_idx + 1
-
-        print(num_batches_used)
+            
         train_loss = train_loss / num_batches_used
         train_acc = train_acc / num_batches_used * 100
 
@@ -298,7 +297,7 @@ if __name__ == "__main__":
     args, _ = make_parser()
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
     device = torch.device(device)
-    print(device)
+    # print(device)
 
     # TODO
     if device == 'cuda':
@@ -320,42 +319,39 @@ if __name__ == "__main__":
         accept_list.extend([x.split(".")[0]
                            for x in files if 'normalized' in x])
 
-    # hyper_parameters = dict(
-    #     # lr=[ 0.0001, 0.00005],
-    #     lr=[ 0.00005],
-    #     batch_size=[16,32, 64],
-    #     # shuffle=[True, False]
-    #     shuffle=[True]
-    # )
-    # param_values = [v for v in hyper_parameters.values()]
+    hyper_parameters = dict(
+        lr=[0.001, 0.0001, 0.00001],
+        batch_size=[16,32, 64],
+        shuffle=[True, False]
+        # shuffle=[True]
+    )
+    param_values = [v for v in hyper_parameters.values()]
 
-    # for lr,batch_size, shuffle in product(*param_values):
+    for lr,batch_size, shuffle in product(*param_values):
 
-    #     print(lr, batch_size, shuffle)
-    #     args.lr = lr
-    #     args.batch_size = batch_size
-    #     args.shuffle = shuffle
+        print(lr, batch_size, shuffle)
+        args.lr = lr
+        args.batch_size = batch_size
+        args.shuffle = shuffle
 
-    #     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-    #         args, accept_list, resize=212)
-    #     # model = BaseCNN()
-    #     # model = VGG_Model()
-    #     model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
-    #     model.to(device)
-    #     print("Training")
-    #     train(args, model, train_dataloader, val_dataloader, device=device)
+        train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
+            args, accept_list, resize=212)
+        # model = BaseCNN()
+        # model = VGG_Model()
+        model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+        model.to(device)
+        print("Training")
+        train(args, model, train_dataloader, val_dataloader, device=device)
 
     # model = BaseCNN()
     # # model = VGG_Model()
-    model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
-    model.to(device)
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-        args, accept_list, resize=212)
+    # model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+    # model.to(device)
+    # train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
+        # args, accept_list, resize=212)
 
     if args.train:
         print("Training")
-        # checkpoint = torch.load(args.save_model)
-        # model.load_state_dict(checkpoint['state_dict'])
         train(args, model, train_dataloader, val_dataloader, device=device)
 
     if args.test:
