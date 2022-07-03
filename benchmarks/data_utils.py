@@ -90,6 +90,8 @@ class DynamicVids(Dataset):
             sample = self.transform(sample)
             
         # print(sample.shape)
+        sample = torch.as_tensor(sample)
+        sample = sample.float()
         return sample, target_class
 
 
