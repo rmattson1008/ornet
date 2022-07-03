@@ -15,7 +15,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import PredefinedSplit
 
 
-def run_benchmarks(path_to_feature_dict):
+def run_benchmarks(feature_dict):
     """
         Assumes data is already split into train/test/val (the same split as for training deep models)
         Implements Gridsearch for classifier params
@@ -25,9 +25,9 @@ def run_benchmarks(path_to_feature_dict):
 
     #TODO - seed
 
-    with open(path_to_feature_dict, 'rb') as f:
-        feature_dict = pickle.load(f)
-    print(feature_dict.keys() )
+    # with open(path_to_feature_dict, 'rb') as f:
+    #     feature_dict = pickle.load(f)
+    # print(feature_dict.keys() )
 
     assert 'train' in feature_dict.keys() and 'test'in feature_dict.keys() and 'val' in feature_dict.keys() 
     train_df = feature_dict["train"]
@@ -45,8 +45,8 @@ def run_benchmarks(path_to_feature_dict):
     merged_y = pd.concat((y_train, y_val), axis=0).to_numpy()
     split = [(range(len(X_train)), range(
         len(X_train), len(X_train) + len(X_val)))]
-    print(split)
-    print(merged_X.shape)
+    # print(split)
+    # print(merged_X.shape)
 
     mytestfold = []
 
@@ -71,7 +71,7 @@ def run_benchmarks(path_to_feature_dict):
     grid = GridSearchCV(estimator=model, param_grid=param_grid, cv=split)
     grid.fit(merged_X, merged_y)
     y_pred = grid.predict(X_test)
-    print(y_pred)
+    # print(y_pred)
     accuracy = np.sum(y_pred == y_test) / len(y_test)
     print(clf , " accuracy:", accuracy)
     cm = confusion_matrix(y_pred, y_test)
@@ -93,7 +93,7 @@ def run_benchmarks(path_to_feature_dict):
     grid = GridSearchCV(estimator=model, param_grid=param_grid, cv=split)
     grid.fit(merged_X, merged_y)
     y_pred = grid.predict(X_test)
-    print(y_pred)
+    # print(y_pred)
     accuracy = np.sum(y_pred == y_test) / len(y_test)
     print(clf ,"accuracy:", accuracy)
     cm = confusion_matrix(y_pred, y_test)
@@ -112,7 +112,7 @@ def run_benchmarks(path_to_feature_dict):
     grid = GridSearchCV(estimator=model, param_grid=param_grid, cv=split)
     grid.fit(merged_X, merged_y)
     y_pred = grid.predict(X_test)
-    print(y_pred)
+    # print(y_pred)
     accuracy = np.sum(y_pred == y_test) / len(y_test)
     print(clf ,"accuracy:", accuracy)
     cm = confusion_matrix(y_pred, y_test)

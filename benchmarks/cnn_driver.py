@@ -36,7 +36,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = SGD(model.parameters(), lr=args.lr)
     print(optimizer)
     criterion = CrossEntropyLoss()
-    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} glob_res_adam'
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} glob_base_adam'
     tb = SummaryWriter(comment=comment)
 
     # train_losses = []
@@ -71,7 +71,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             real_total_correct = outputs.argmax(dim=1).eq(labels).sum().item()
             train_acc += real_total_correct / len(labels)
             num_batches_used = batch_idx + 1
-            
+
         train_loss = train_loss / num_batches_used
         train_acc = train_acc / num_batches_used * 100
 
@@ -156,7 +156,6 @@ def test(args, model, test_dataloader, show_plots=True, device='cpu'):
     return
 
 
-# TODO - some other weight to lessen the importance of llo in training.
 def get_weighted_sampler(train_dataset, dataset):
     """
     Weighted Random Sampling
@@ -286,8 +285,6 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
         feature_dict[loader_name] = final_df
         # save_path = args.save_features.split(".")[0] + name + "." + args.save_features.split(".")[1]
 
-    with open(args.save_features, 'wb') as f:
-        pickle.dump(feature_dict, f)
 
     return feature_dict
 
@@ -320,10 +317,13 @@ if __name__ == "__main__":
                            for x in files if 'normalized' in x])
 
     hyper_parameters = dict(
-        lr=[0.001, 0.0001, 0.00001],
-        batch_size=[16,32, 64],
-        shuffle=[True, False]
-        # shuffle=[True]
+        # lr=[0.001, 0.0001, 0.00001],
+        lr=[0.0001],
+        # lr=[0.0001, 0.00001],
+        # batch_size=[16, 32, 64],
+        batch_size=[32],
+        # shuffle=[True, False]
+        shuffle=[True]
     )
     param_values = [v for v in hyper_parameters.values()]
 
@@ -335,10 +335,11 @@ if __name__ == "__main__":
         args.shuffle = shuffle
 
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-            args, accept_list, resize=212)
-        # model = BaseCNN()
+            args, accept_list, resize=28)
+
+        model = BaseCNN()
         # model = VGG_Model()
-        model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+        # model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
         model.to(device)
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
@@ -369,4 +370,6 @@ if __name__ == "__main__":
         loader_dict = {
             "train": train_dataloader, "test": test_dataloader, "val": val_dataloader
         }
-        get_deep_features(args, model, loader_dict, device=device)
+        feature_dict = get_deep_features(args, model, loader_dict, device=device)
+        # with open(args.save_features, 'wb') as f:
+        #     pickle.dump(feature_dict, f)
