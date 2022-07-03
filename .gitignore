@@ -13,4 +13,6 @@ htmlcov
 helper.py
 *.pth
 
+events*
+
 .ipynb_checkpoints

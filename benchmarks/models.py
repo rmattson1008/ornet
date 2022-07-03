@@ -46,17 +46,20 @@ class CNN_LSTM(Module):
         self.bidirectional = bidirectional
 
         self.cnn_layers = Sequential(
-            Conv2d(1, 4, 3, padding=1),
+            # Convolution 1
+            #expand feature maps
+            Conv2d(1,4,3), 
             BatchNorm2d(4),
-            LeakyReLU(inplace=True),
-            MaxPool2d(2, stride=2),
+            ReLU(inplace=True),
+            MaxPool2d(3, stride=1),
+
             # Convolution 2
-            Conv2d(4, 4, 3, padding=1),
+            Conv2d(4,4,3), 
             BatchNorm2d(4),
-            LeakyReLU(inplace=True),
-            MaxPool2d(2, stride=2)
+            ReLU(inplace=True),
+            MaxPool2d(3, stride=1)
         )
-        cnn_representation_size = 4 * 7 * 7
+        cnn_representation_size = 4 * 20 * 20
 
         self.lstm_input_size = cnn_representation_size
         self.lstm_hidden_size = cnn_representation_size

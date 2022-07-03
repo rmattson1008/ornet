@@ -17,67 +17,180 @@ from albumentations.pytorch import ToTensorV2
 import copy
 import os
 import math
+from tqdm import tqdm
+from time import sleep
+
+from torch.utils.tensorboard import SummaryWriter
+from itertools import product
 
 
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
-    lr = args.lr
+    # lr = args.lr
     epochs = args.epochs
-    optimizer = Adam(model.parameters())
-    # optimizer = SGD(model.parameters(), lr=lr)
+    optimizer = Adam(model.parameters(), lr=args.lr)
+    # optimizer = SGD(model.parameters(), lr=args.lr)
+    print(optimizer)
     criterion = CrossEntropyLoss()
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} glob_lstm_adam'
+    tb = SummaryWriter(comment=comment)
 
-    model.to(device)
-    for epoch in range(epochs):
-        # print("Epoch", epoch + 1)
+    # train_losses = []
+    val_losses = []
+
+    # for epoch in range(epochs):
+    for epoch in tqdm(range(epochs), desc="epochs"):
         model.train()
-        training_loss = 0.0
 
-        for i, data in enumerate(train_dataloader):
-            # print("training on", i)
-            # if i % 30 == 0:
+        train_loss = 0.0
+        val_loss = 0.0
+        total_correct = 0.0
+        val_total_correct = 0.0
+        train_acc = 0.0
+        val_acc = 0.0
+        num_batches_used = 0.0 
 
-            # get the inputs; data is a list of [inputs, labels]
-            # print(data.shape)
-            inputs, labels = get_augmented_batch(data)
-            # print(labels)
+        for batch_idx, data in enumerate(train_dataloader):
+            inputs, labels = data
+            # inputs, labels = get_augmented_batch(data)
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.float()  # shouldn't stay on this step.
-            # print("input shape", inputs.shape)
-
+        
             # zero the parameter gradients
             optimizer.zero_grad()
 
-            # print(inputs.shape)
+            # forward + backward + optimize
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            training_loss += loss.item()
+            train_loss += loss.item()
+            total_correct += outputs.argmax(dim=1).eq(labels).sum().item()
+            real_total_correct = outputs.argmax(dim=1).eq(labels).sum().item()
+            train_acc += real_total_correct / len(labels)
+            num_batches_used = batch_idx + 1
+
+        train_loss = train_loss / num_batches_used
+        train_acc = train_acc / num_batches_used * 100
 
         model.eval()
-        valid_loss = 0.0
-        for inputs, labels in val_dataloader:
-            # get the inputs; data is a list of [inputs, labels]
+        num_batches_used = 0.0 
+        for batch_idx, (inputs, labels) in enumerate(val_dataloader):
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.float()  # shouldn't stay on this step.
+            preds, _ = model(inputs)
+            loss = criterion(preds, labels)
+            val_loss += loss.item()
+            val_total_correct += preds.argmax(dim=1).eq(labels).sum().item()
+            real_val_total_correct = preds.argmax(dim=1).eq(labels).sum().item()
+            val_acc += real_val_total_correct / len(labels)
+            num_batches_used = batch_idx + 1
 
-            logits, hidden_state = model(inputs)
-            # print(logits.shape)
-            _, pred = torch.max(logits, 1)
-            loss = criterion(logits, labels)
-            valid_loss += loss.item()
+        val_loss = val_loss / num_batches_used
+        val_acc = val_acc / num_batches_used * 100
+  
 
-        print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
-             \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
+        tb.add_scalar("AvgTrainLoss", train_loss, epoch)
+        tb.add_scalar("AvgValLoss", val_loss, epoch)
+        tb.add_scalar("TrainAccuracy", train_acc, epoch)
+        tb.add_scalar("ValAccuracy", val_acc, epoch)
+        tb.add_scalar("TotalCorrect", total_correct, epoch)
+        tb.add_scalar("ValTotalCorrect", val_total_correct, epoch)
 
-        # TODO - stop training when Val drops? val score is wack right now
 
-    if args.save:
-        print(args.save)
-        print("Saving model")
-        torch.save(model.state_dict(), args.save)
+        # save the model at lowest val loss score and continue training
+        # the val loss curve is not incredibly smooth so I dont want to risk a local optimum
+        val_losses.append(val_loss)
+        if val_loss == np.min(val_losses):
+            best_accuracy = val_acc
+            if args.save_model:
+                save_path = args.save_model + "_" + str(args.lr) + "_" +str(args.batch_size) + "_" +str(args.shuffle) + "_" +str(args.epochs)  + ".pth"
+                # print("Saving model")
+                torch.save(
+                    {'epoch': epoch + 1,
+                     'state_dict': model.state_dict()},
+                    save_path)
 
+    tb.add_hparams(
+        {"lr": args.lr, "bsize": args.batch_size, "shuffle": args.shuffle},
+        {
+            # these are score at the end of training, probably overfit.
+            "accuracy": train_acc,
+            "loss": train_loss,
+            # this is from early stop spot
+            "best_accuracy": best_accuracy,
+        },
+    )
+
+    tb.close()
     return
+
+# def train(args, model, train_dataloader, val_dataloader, device='cpu'):
+#     lr = args.lr
+#     epochs = args.epochs
+#     optimizer = Adam(model.parameters())
+#     # optimizer = SGD(model.parameters(), lr=lr)
+#     criterion = CrossEntropyLoss()
+#     comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} cnn-lstm'
+#     tb = SummaryWriter(comment=comment)
+
+#     model.to(device)
+#     for epoch in range(epochs):
+#         # print("Epoch", epoch + 1)
+#         model.train()
+#         training_loss = 0.0
+
+#         train_loss = 0.0
+#         val_loss = 0.0
+#         total_correct = 0.0
+#         val_total_correct = 0.0
+#         train_acc = 0.0
+#         val_acc = 0.0
+#         num_batches_used = 0.0 
+
+#         for  data in train_dataloader:
+#             # print("training on", i)
+#             # if i % 30 == 0:
+
+#             # get the inputs; data is a list of [inputs, labels]
+#             # print(data.shape)
+#             inputs, labels = get_augmented_batch(data)
+#             # print(labels)
+#             inputs, labels = inputs.to(device), labels.to(device)
+#             inputs = inputs.float()  # shouldn't stay on this step.
+#             # print("input shape", inputs.shape)
+
+#             # zero the parameter gradients
+#             optimizer.zero_grad()
+
+#             # print(inputs.shape)
+#             outputs, _ = model(inputs)
+#             loss = criterion(outputs, labels)
+#             loss.backward()
+#             optimizer.step()
+#             training_loss += loss.item()
+
+#         model.eval()
+#         valid_loss = 0.0
+#         for inputs, labels in val_dataloader:
+#             # get the inputs; data is a list of [inputs, labels]
+#             inputs, labels = inputs.to(device), labels.to(device)
+#             inputs = inputs.float()  # shouldn't stay on this step.
+
+#             logits, hidden_state = model(inputs)
+#             # print(logits.shape)
+#             _, pred = torch.max(logits, 1)
+#             loss = criterion(logits, labels)
+#             valid_loss += loss.item()
+
+#         print(f'Epoch {epoch+1} \t\t Training Loss: {training_loss / len(train_dataloader) }\
+#              \t\t Validation Loss: {valid_loss / len(val_dataloader )}')
+
+#         # TODO - stop training when Val drops? val score is wack right now
+
+#     if args.save:
+#         print(args.save)
+#         print("Saving model")
+#         torch.save(model.state_dict(), args.save)
+
+#     return
 
 
 def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
@@ -147,7 +260,7 @@ def get_augmented_batch(data):
     return new_images, new_labels
 
 
-def get_dataloaders(args, accept_list):
+def get_dataloaders(args, accept_list,  resize):
     """
     Access ornet dataset, apply any necessary transformations to images, 
     split into train/test/validate, and return dataloaders
@@ -159,9 +272,9 @@ def get_dataloaders(args, accept_list):
         transform = transforms.Compose([RoiTransform(window_size=(28, 28))])
     else:
         print("Using global image inputs")
-        transform = transforms.Compose([transforms.Resize(size=28)])
+        transform = transforms.Compose([transforms.Resize(size=resize)])
     dataset = DynamicVids(
-        args.input_dir, accept_list, num_to_sample=args.sequence, class_types=args.classes, transform=transform)  # nt working :/
+        args.input_dir, accept_list, num_to_sample=args.sequence, class_types=args.classes, transform=transform) 
 
     print("dataset", len(dataset))
 
@@ -220,7 +333,6 @@ if __name__ == "__main__":
     # num_lstm_layers = 10  # too many?
     # lstm_hidden_size = -1 # if we decide to have a different hidden space size then must add param to model
 
-    model = CNN_LSTM(args.sequence)
 
     device = 'cpu' if args.cuda == 0 or not torch.cuda.is_available() else 'cuda'
 
@@ -244,28 +356,57 @@ if __name__ == "__main__":
             if 'normalized' in file:
                 accept_list.append(file.split(".")[0])
 
-    train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
+    # train_dataloader, test_dataloader, val_dataloader = get_dataloaders(args, accept_list)
     # print("Train_size", len(train_dataloader))
+
+
+    hyper_parameters = dict(
+        # lr=[0.001, 0.0001, 0.00001],
+        lr=[0.0001],
+        # lr=[0.0001, 0.00001],
+        # batch_size=[16, 32, 64],
+        batch_size=[32],
+        # shuffle=[True, False]
+        shuffle=[True]
+    )
+    param_values = [v for v in hyper_parameters.values()]
+
+    for lr,batch_size, shuffle in product(*param_values):
+
+        print(lr, batch_size, shuffle)
+        args.lr = lr
+        args.batch_size = batch_size
+        args.shuffle = shuffle
+
+        model = CNN_LSTM(args.sequence)
+
+        train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
+            args, accept_list, resize=28)
+
+        model.to(device)
+        print("Training")
+        train(args, model, train_dataloader, val_dataloader, device=device)
 
     
     if args.train:
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)
 
-    # if not args.train:
-    #     try:
-    #         saved_state = torch.load(args.save)
-    #         model.load_state_dict(saved_state)
-    #         # how to check soemthing happened..
-    #         print(type(model))
-    #     except:
-    #         # please exit
-    #         print(
-    #             "Please provide the path to an existing model state using --save \"<path>\" or train a new one with --train")
-    #         exit()
-
     if args.test:
+        checkpoint = torch.load(args.save_model)
+        model.load_state_dict(checkpoint['state_dict'])
         print("Testing")
+
         test(args, model, test_dataloader, device=device)
 
-# TODO - frame sampling with different batch sizes
+    # get features from final model.
+    # if args.save_features:
+    #     checkpoint = torch.load(args.save_model)
+    #     model.load_state_dict(checkpoint['state_dict'])
+    #     print("Getting deep features")
+    #     loader_dict = {
+    #         "train": train_dataloader, "test": test_dataloader, "val": val_dataloader
+    #     }
+    #     feature_dict = get_deep_features(args, model, loader_dict, device=device)
+    #     # with open(args.save_features, 'wb') as f:
+    #     #     pickle.dump(feature_dict, f)
