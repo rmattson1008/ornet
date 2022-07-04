@@ -226,17 +226,20 @@ def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
 
 def get_augmented_batch(data):
     """
-    applying same transform problem.
+    applying same transform to each image was ugly. This function can never see the light of day. 
     """
     inputs, labels = data
     assert args.sequence == 10;
     new_images = inputs.clone().detach()
     new_labels = labels.clone().detach()
     A_transforms = [
-        [A.Sharpen(alpha=(0.2, 0.5), lightness=(0.5, 1.0), p=1), ToTensorV2()],
-        [A.Transpose(p=1), ToTensorV2()],
-        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()]
-        # [A.RandomShadow((0,0,1,1), 5, 10, 3, p=1), ToTensorV2()],
+        # [A.Sharpen(alpha=(.5, 1.), lightness=(0.1, 0.1), always_apply=True), ToTensorV2()],
+        [A.Emboss(alpha=(0.2, 0.5), strength=(0.2, 0.7), always_apply=True), ToTensorV2()],
+        [A.Superpixels(p_replace=0.1, n_segments=200, max_size=128, interpolation=1, always_apply=True), ToTensorV2()],
+        # [A.Transpose(p=1), ToTensorV2()],
+        [A.Blur(blur_limit=7, always_apply=True), ToTensorV2()],
+        [A.RandomRotate90(p=1.0), ToTensorV2()],
+        # [A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.50, rotate_limit=45, p=1.0), ToTensorV2()]
     ]
 
     for t in A_transforms:
@@ -255,14 +258,14 @@ def get_augmented_batch(data):
             # print("###")
 
 
-            print(sample.shape)
+            # print(sample.shape)
         
             transformed = t(image=sample[0][0].numpy(), image1=sample[1][0].numpy(), image2=sample[2][0].numpy(), image3=sample[3][0].numpy(), image4=sample[4][0].numpy(), image5=sample[5][0].numpy(), image6=sample[6][0].numpy(), image7=sample[7][0].numpy(), image8=sample[8][0].numpy(), image9=sample[9][0].numpy())
-            print(transformed["image"].shape)
+            # print(transformed["image"].shape)
             aug = torch.stack((transformed["image"], transformed["image1"], transformed["image2"], transformed["image3"], transformed["image4"], transformed["image5"], transformed["image6"], transformed["image7"], transformed["image8"], transformed["image9"]), dim=0)
             aug = aug.unsqueeze(0)
 
-            print(new_images.shape, aug.shape)
+            # print(new_images.shape, aug.shape)
             new_images = torch.cat((new_images, aug))
             # print(new_images.shape)
 
