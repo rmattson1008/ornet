@@ -50,8 +50,8 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         num_batches_used = 0.0 
 
         for batch_idx, data in enumerate(train_dataloader):
-            inputs, labels = data
-            # inputs, labels = get_augmented_batch(data)
+            # inputs, labels = data
+            inputs, labels = get_augmented_batch(data)
             inputs, labels = inputs.to(device), labels.to(device)
         
             # zero the parameter gradients
@@ -225,7 +225,11 @@ def test(args,  model, test_dataloader, show_plots=True, device='cpu'):
 
 
 def get_augmented_batch(data):
+    """
+    applying same transform problem.
+    """
     inputs, labels = data
+    assert args.sequence == 10;
     new_images = inputs.clone().detach()
     new_labels = labels.clone().detach()
     A_transforms = [
@@ -236,19 +240,29 @@ def get_augmented_batch(data):
     ]
 
     for t in A_transforms:
-        t = A.Compose(t)
+        t = A.Compose(t, additional_targets={'image1': 'image', 'image2': 'image', 'image3': 'image', 'image4': 'image', 'image5': 'image', 'image6': 'image', 'image7': 'image', 'image8': 'image', 'image9': 'image'})
         # extend labels by one original batch
         new_labels = torch.cat((new_labels, labels))
 
         for sample in inputs:
-            aug = [t(image=channel.numpy())["image"]
-                   for frame in sample
-                   for channel in frame]
-            # print(len(aug))
-            # print(aug[0].shape)
-            aug = torch.stack(aug, dim=1)
-            aug = aug.unsqueeze(2)
+            # aug = [t(image=channel.numpy())["image"]
+            #        for frame in sample
+            #        for channel in frame]
+            # # print(len(aug))
+            # # print(aug[0].shape)
+            # aug = torch.stack(aug, dim=1)
+            # aug = aug.unsqueeze(2)
             # print("###")
+
+
+            print(sample.shape)
+        
+            transformed = t(image=sample[0][0].numpy(), image1=sample[1][0].numpy(), image2=sample[2][0].numpy(), image3=sample[3][0].numpy(), image4=sample[4][0].numpy(), image5=sample[5][0].numpy(), image6=sample[6][0].numpy(), image7=sample[7][0].numpy(), image8=sample[8][0].numpy(), image9=sample[9][0].numpy())
+            print(transformed["image"].shape)
+            aug = torch.stack((transformed["image"], transformed["image1"], transformed["image2"], transformed["image3"], transformed["image4"], transformed["image5"], transformed["image6"], transformed["image7"], transformed["image8"], transformed["image9"]), dim=0)
+            aug = aug.unsqueeze(0)
+
+            print(new_images.shape, aug.shape)
             new_images = torch.cat((new_images, aug))
             # print(new_images.shape)
 
@@ -258,6 +272,27 @@ def get_augmented_batch(data):
         inputs.size(0) + inputs.size(0)
 
     return new_images, new_labels
+
+
+    """
+    
+    for t in A_transforms:
+        t = A.Compose(t, additional_targets={'image1': 'image'})
+        # extend labels by one original batch
+        new_labels = torch.cat((new_labels, labels))
+
+        for sample in inputs:
+            transformed = t(image=sample[0].numpy(), image1=sample[1].numpy())
+            aug = torch.stack((transformed["image"], transformed["image1"]), dim=1)
+            new_images = torch.cat((new_images, aug))
+
+    # make sure general shape of data is correct
+    assert inputs[0].shape == new_images[0].shape
+    assert new_labels.size(0) == len(A_transforms) * \
+        inputs.size(0) + inputs.size(0)
+
+    return new_images, new_labels
+    """
 
 
 def get_dataloaders(args, accept_list,  resize):
@@ -362,7 +397,7 @@ if __name__ == "__main__":
 
     hyper_parameters = dict(
         # lr=[0.001, 0.0001, 0.00001],
-        lr=[0.00001],
+        lr=[0.0001],
         # lr=[0.0001, 0.00001],
         # batch_size=[16, 32, 64],
         batch_size=[32],
