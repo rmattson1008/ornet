@@ -362,7 +362,7 @@ if __name__ == "__main__":
 
     hyper_parameters = dict(
         # lr=[0.001, 0.0001, 0.00001],
-        lr=[0.0001],
+        lr=[0.00001],
         # lr=[0.0001, 0.00001],
         # batch_size=[16, 32, 64],
         batch_size=[32],

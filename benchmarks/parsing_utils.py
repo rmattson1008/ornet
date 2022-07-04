@@ -9,6 +9,13 @@ def make_parser(default_config_files=[".my_settings"]):
         action='store_true',
         help='choose to sample training data in a weighted manner',
     )
+    parser.add_argument(
+        "--save_model",
+        type=str,
+        default="",
+        metavar="s",
+        help="saves the weights to a given filepath",
+    )
 
     parser.add_argument(
         '--roi', 
