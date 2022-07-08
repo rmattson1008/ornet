@@ -2,7 +2,7 @@ from typing import OrderedDict
 import torch
 from collections import OrderedDict 
 import torch.nn as nn
-from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d, LeakyReLU
+from torch.nn import Linear, ReLU, ELU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d, LeakyReLU
 
 
 # 2 blocks, expands feature maps immediately and has 2 linear layers
@@ -33,8 +33,10 @@ class BaseCNN(Module):
         # should be length of unwound channels * feature map dims
         cnn_out_size = 4 * 20 * 20
         
-        self.final_rep_layer = Linear(cnn_out_size, 10)
+        self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 400), nn.ELU(), Linear(400, 10) , nn.ELU())
+        # self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 1024), nn.ELU(), Linear(1024, 512) , nn.ELU(), Linear(512, 256) , nn.ELU(), Linear(256, 128) , nn.ELU(),  Linear( 128, 10) , nn.ELU())
         self.fc = Linear(10,3)
+
 
        
         self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embeddings10"))
@@ -54,7 +56,6 @@ class BaseCNN(Module):
 
 
 
-# Losely styled after vgg model
 class VGG_Model(Module):
     
     def __init__(self):
@@ -79,7 +80,8 @@ class VGG_Model(Module):
         # should be length of unwound channels * feature map dims
         db_size = 256 * 7 * 7
         # one layer to classify
-        self.linear_layers = Sequential(Linear(db_size, 3))
+        self.linear_layers = Sequential(Linear(db_size, 1024), nn.ELU(), Linear(1024, 512), nn.ELU(), Linear(512, 10), nn.ELU())
+        self.fc = Linear(10,3)
 
 
     def forward(self, x):
@@ -151,7 +153,7 @@ class ResNet18(nn.Module):
         self.gap = torch.nn.AdaptiveAvgPool2d(1)
         # self.fc = torch.nn.Linear(512, outputs)
 
-        self.final_rep_layer = Linear(512, 10)
+        self.final_rep_layer = nn.Sequential(Linear(512, 256), nn.LeakyReLU(), Linear(256, 128), nn.LeakyReLU(), Linear(128, 10), nn.LeakyReLU()) 
         self.fc = Linear(10,outputs)
 
         self.hook = self.final_rep_layer.register_forward_hook(self.forward_hook("embeddings10"))
