@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
 import torchvision
-from torch.optim import Adam, SGD
+from torch.optim import Adam, SGD, AdamW
 from torch.nn import CrossEntropyLoss
 import pickle
 
@@ -32,11 +32,11 @@ from itertools import product
 def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # lr = args.lr
     epochs = args.epochs
-    optimizer = Adam(model.parameters(), lr=args.lr)
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # optimizer = SGD(model.parameters(), lr=args.lr)
     print(optimizer)
     criterion = CrossEntropyLoss()
-    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} epochs = {args.epochs} glob_base_adam'
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} roi = {args.roi} epochs = {args.epochs} wd = {args.weight_decay} res_adam7'
     tb = SummaryWriter(comment=comment)
 
     # train_losses = []
@@ -53,6 +53,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         train_acc = 0.0
         val_acc = 0.0
         num_batches_used = 0.0 
+        other_val_loss = 0.0
 
         for batch_idx, data in enumerate(train_dataloader):
             inputs, labels = get_augmented_batch(data)
@@ -82,17 +83,20 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
             preds, _ = model(inputs)
             loss = criterion(preds, labels)
             val_loss += loss.item()
+            other_val_loss += loss.item() 
             val_total_correct += preds.argmax(dim=1).eq(labels).sum().item()
             real_val_total_correct = preds.argmax(dim=1).eq(labels).sum().item()
             val_acc += real_val_total_correct / len(labels)
             num_batches_used = batch_idx + 1
 
+        other_val_loss = other_val_loss / len(val_dataloader)
         val_loss = val_loss / num_batches_used
         val_acc = val_acc / num_batches_used * 100
   
 
         tb.add_scalar("AvgTrainLoss", train_loss, epoch)
         tb.add_scalar("AvgValLoss", val_loss, epoch)
+        tb.add_scalar("OtherValLoss", other_val_loss, epoch)
         tb.add_scalar("TrainAccuracy", train_acc, epoch)
         tb.add_scalar("ValAccuracy", val_acc, epoch)
         tb.add_scalar("TotalCorrect", total_correct, epoch)
@@ -105,7 +109,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
         if val_loss == np.min(val_losses):
             best_accuracy = val_acc
             if args.save_model:
-                save_path = args.save_model + "_" + str(args.lr) + "_" +str(args.batch_size) + "_" +str(args.shuffle) + "_" +str(args.epochs)  + ".pth"
+                save_path = args.save_model + "_" + str(args.lr) + "_" +str(args.batch_size) + "_" +str(args.shuffle) + "_" +str(args.epochs) + "_" +str(args.weight_decay)  + ".pth"
                 # print("Saving model")
                 torch.save(
                     {'epoch': epoch + 1,
@@ -317,29 +321,42 @@ if __name__ == "__main__":
                            for x in files if 'normalized' in x])
 
     hyper_parameters = dict(
-        # lr=[0.001, 0.0001, 0.00001],
-        lr=[0.0001],
-        # lr=[0.0001, 0.00001],
-        # batch_size=[16, 32, 64],
-        batch_size=[32],
-        # shuffle=[True, False]
-        shuffle=[True]
+        # lr=[ 0.0001, 0.00001],
+        lr=[0.0001], 
+        # lr = [0.0001 , 0.00001 ],
+        # lr = [0.0001],
+        # batch_size=[16, 32, 64, 91],
+        batch_size=[91, 64, 32, 16],
+        # batch_size=[91],
+        # batch_size=[ 32],
+        # batch_size=[1],
+        # batch_size=[32],
+        # roi=[True, False],
+        roi=[False],
+        wd = [0.01],
+        shuffle=[True, False]
+        # shuffle=[False]
     )
+
+    #finish roi res at 1e-05
+
     param_values = [v for v in hyper_parameters.values()]
 
-    for lr,batch_size, shuffle in product(*param_values):
+    for lr,batch_size,roi,wd, shuffle in product(*param_values):
 
         print(lr, batch_size, shuffle)
         args.lr = lr
         args.batch_size = batch_size
         args.shuffle = shuffle
+        args.roi = roi
+        args.weight_decay = wd
 
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-            args, accept_list, resize=28)
+            args, accept_list, resize=224)
 
-        model = BaseCNN()
+        # model = BaseCNN()
         # model = VGG_Model()
-        # model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
+        model = ResNet18(in_channels=2, resblock=ResBlock, outputs=3)
         model.to(device)
         print("Training")
         train(args, model, train_dataloader, val_dataloader, device=device)

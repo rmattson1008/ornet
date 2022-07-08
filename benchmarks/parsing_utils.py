@@ -50,6 +50,10 @@ def make_parser(default_config_files=[".my_settings"]):
     parser.add_argument(
         "--lr", type=float, default=1e-3, metavar="lr", help="learning rate"
     )
+     
+    parser.add_argument(
+        "--weight_decay", type=float, default=0, metavar="wd", help="wieght decay for ADAM"
+    )
 
     parser.add_argument(
         "--epochs",
