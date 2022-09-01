@@ -13,9 +13,52 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import PredefinedSplit
+from sklearn.decomposition import PCA, KernelPCA
+import seaborn
+
+
 
 
 def run_benchmarks(feature_dict):
+    assert 'train' in feature_dict.keys() and 'test'in feature_dict.keys() and 'val' in feature_dict.keys() 
+    # train_df = feature_dict["train"].copy()
+    # test_df = feature_dict["test"].copy()
+    # val_df = feature_dict["val"].copy()
+
+    show_pca(feature_dict)
+
+    print("Benchmarks for MDIVI vs LLO")
+    train_df = feature_dict["train"].copy()
+    train_df  = train_df.loc[train_df["label"] != 0]
+    test_df = feature_dict["test"].copy()
+    test_df  = test_df.loc[test_df["label"] != 0]
+    val_df = feature_dict["val"].copy()
+    val_df  = val_df.loc[val_df["label"] != 0]
+    run_models(train_df, test_df, val_df)
+
+    print("Benchmarks for Control vs LLO")
+    train_df = feature_dict["train"].copy()
+    train_df  = train_df.loc[train_df["label"] != 1]
+    test_df = feature_dict["test"].copy()
+    test_df  = test_df.loc[test_df["label"] != 1]
+    val_df = feature_dict["val"].copy()
+    val_df  = val_df.loc[val_df["label"] != 1]
+    run_models(train_df, test_df, val_df)
+    
+
+    print("Benchmarks for MDIVI vs Control")
+    train_df = feature_dict["train"].copy()
+    train_df  = train_df.loc[train_df["label"] != 2]
+    test_df = feature_dict["test"].copy()
+    test_df  = test_df.loc[test_df["label"] != 2]
+    val_df = feature_dict["val"].copy()
+    val_df  = val_df.loc[val_df["label"] != 2]
+    run_models(train_df, test_df, val_df)
+
+
+
+
+def run_models(train_df, test_df, val_df):
     """
         Assumes data is already split into train/test/val (the same split as for training deep models)
         Implements Gridsearch for classifier params
@@ -23,16 +66,8 @@ def run_benchmarks(feature_dict):
 
     """
 
-    #TODO - seed
-
-    # with open(path_to_feature_dict, 'rb') as f:
-    #     feature_dict = pickle.load(f)
-    # print(feature_dict.keys() )
-
-    assert 'train' in feature_dict.keys() and 'test'in feature_dict.keys() and 'val' in feature_dict.keys() 
-    train_df = feature_dict["train"]
-    test_df = feature_dict["test"]
-    val_df = feature_dict["val"]
+  
+    
     X_train = train_df.iloc[:, :-1]
     y_train = train_df['label']
     X_test = test_df.iloc[:, :-1]
@@ -119,3 +154,45 @@ def run_benchmarks(feature_dict):
     print(cm)
 
     return
+
+
+def show_pca(feature_dict):
+    train_df = feature_dict["train"]
+    test_df = feature_dict["test"]
+    val_df = feature_dict["val"]
+
+    X_train = train_df.iloc[:, :-1]
+    y_train = train_df['label']
+    X_test = test_df.iloc[:, :-1]
+    y_test = test_df['label']
+    # X_val = val_df.iloc[:, :-1]
+    # y_val = val_df['label']
+
+    pca = PCA(n_components=2)
+
+    X_test_pca = pca.fit(X_train).transform(X_test)
+    plt.scatter(X_test_pca[:, 0], X_test_pca[:, 1], c=y_test)
+    plt.show()
+
+
+def show_conf_mat(conf_mat, class_label_list, title=''):
+    num_classes = len(class_label_list)
+    ticks = np.arange(num_classes)+0.5
+    conf_mat = conf_mat / np.sum(conf_mat)
+    print(conf_mat)
+    seaborn.heatmap(conf_mat, cmap='RdPu', 
+            xticklabels=class_label_list, yticklabels=class_label_list,
+            annot=True, annot_kws={'size': 12, 'weight':'bold'})
+    
+    plt.title(title, fontsize=18); 
+    plt.xlabel('Prediction', fontsize=16);
+    plt.xlim(0,num_classes)
+    plt.xticks(ticks, class_label_list, rotation=45)
+    
+    plt.ylabel('Truth', fontsize=16);
+    plt.ylim(0,num_classes)
+    plt.yticks(ticks, class_label_list,rotation='horizontal') 
+#     plt.invert_yaxis();
+    plt.gca().invert_yaxis()
+    plt.axis('auto')
+    plt.show()
