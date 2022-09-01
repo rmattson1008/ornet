@@ -32,6 +32,7 @@ class BaseCNN(Module):
 
         # should be length of unwound channels * feature map dims
         cnn_out_size = 4 * 20 * 20
+        # cnn_out_size = 4 * 22 * 22
         
         self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 400), nn.ELU(), Linear(400, 10) , nn.ELU())
         # self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 1024), nn.ELU(), Linear(1024, 512) , nn.ELU(), Linear(512, 256) , nn.ELU(), Linear(256, 128) , nn.ELU(),  Linear( 128, 10) , nn.ELU())
