@@ -36,7 +36,7 @@ def train(args, model, train_dataloader, val_dataloader, device='cpu'):
     # optimizer = SGD(model.parameters(), lr=args.lr)
     print(optimizer)
     criterion = CrossEntropyLoss()
-    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} roi = {args.roi} epochs = {args.epochs} wd = {args.weight_decay} res_adam7'
+    comment = f' batch_size = {args.batch_size} lr = {args.lr} shuffle = {args.shuffle} roi = {args.roi} epochs = {args.epochs} wd = {args.weight_decay} res_adam12'
     tb = SummaryWriter(comment=comment)
 
     # train_losses = []
@@ -275,6 +275,7 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
     for (loader_name, loader) in loader_dict.items():
         frames = []
         for inputs, labels in loader:
+            # print(labels)
             inputs, labels = inputs.to(device), labels.to(device)
             inputs = inputs.float()
             outputs, features = model(inputs)
@@ -286,6 +287,8 @@ def get_deep_features(args, model, loader_dict, device="cpu"):
             df['label'] = labels
             frames.append(df)
         final_df = pd.concat(frames)
+        # final_df = final_df.drop(final_df['label'] == 0, 1)
+        
         feature_dict[loader_name] = final_df
         # save_path = args.save_features.split(".")[0] + name + "." + args.save_features.split(".")[1]
 
@@ -321,22 +324,43 @@ if __name__ == "__main__":
                            for x in files if 'normalized' in x])
 
     hyper_parameters = dict(
-        # lr=[ 0.0001, 0.00001],
-        lr=[0.0001], 
+        lr=[  0.000001],
+        # lr=[0.00001], 
         # lr = [0.0001 , 0.00001 ],
         # lr = [0.0001],
-        # batch_size=[16, 32, 64, 91],
-        batch_size=[91, 64, 32, 16],
+        batch_size=[ 1],
+        # batch_size=[64, 32, 16], 
+        # batch_size=[16],
+        # batch_size=[64],
         # batch_size=[91],
         # batch_size=[ 32],
         # batch_size=[1],
         # batch_size=[32],
         # roi=[True, False],
-        roi=[False],
-        wd = [0.01],
-        shuffle=[True, False]
+        roi=[True],
+        # wd = [ 0.01],
+        wd = [ 0.1, 0.01],
+        shuffle=[False, True]
         # shuffle=[False]
     )
+    # hyper_parameters = dict(
+    #     # lr=[ 0.0001, 0.00001],
+    #     lr=[0.0001], 
+    #     # lr = [0.0001 , 0.00001 ],
+    #     # lr = [0.0001],
+    #     # batch_size=[16, 32, 64, 91],
+    #     batch_size=[91, 64, 32, 16],
+    #     # batch_size=[64],
+    #     # batch_size=[91],
+    #     # batch_size=[ 32],
+    #     # batch_size=[1],
+    #     # batch_size=[32],
+    #     # roi=[True, False],
+    #     roi=[False],
+    #     wd = [0, 0.01],
+    #     shuffle=[True, False]
+    #     # shuffle=[False]
+    # )
 
     #finish roi res at 1e-05
 
