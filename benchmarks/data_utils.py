@@ -111,10 +111,21 @@ def vid_to_np_frames(vid_path):
 # from entire video. Now the data is stored as as only 2 frames, so not really a necessary step
 ###
 class FramePairDataset(Dataset):
-    def __init__(self, path_to_folder, class_types=['control', 'mdivi', 'llo'], transform=None):
+    """
+    dataset class for first and last frames of cell videos. 
+    """
+    def __init__(self, path_to_folder, accept_list=[], class_types=['control', 'mdivi', 'llo'], transform=None, augmentations=None):
+        """
+        path_to_folder: directory containing subfolders of class instances
+        accept_list: list of all file names that should be included in the dataset. Contrains unwanted samples.
+        class_types: list of possible class names
+        transform: torch type transform, typically for base transformation
+        augmentation: ablumentations type transforms, for augmenting/expanding data set
+        """
         self.targets= []
         self.vid_path = []
         self.transform = transform
+        # self.aug = augmentations
         self.class_types = class_types
 
         print(path_to_folder)
@@ -125,26 +136,33 @@ class FramePairDataset(Dataset):
             path = os.path.join(path_to_folder, label)
             files = os.listdir(path)
             for file_name in files:
-                    if 'normalized' in file_name:
+                    # if 'normalized' in file_name:
+                    if file_name.split(".")[0] in accept_list:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
         
     def __len__(self):
         return len(self.targets)
 
-    
     def __getitem__(self, idx):
         target_class = self.targets[idx]
         vid = np.load(self.vid_path[idx])
 
-        frames = vid[0:2]
-        assert frames.shape == (2,512,512) 
-        sample = torch.as_tensor(frames)
+        sample = vid[0:2]
+        assert sample.shape == (2,512,512) 
 
+        # TODO - will probably cause error during
+        s = torch.as_tensor(sample)
         if self.transform:
-            sample = self.transform(sample)
-            
+            # print("calling transform")
+            sample = self.transform(s)
+            # sample = self.transform(sample)
+        
+        sample = torch.as_tensor(sample)
+        sample = sample.float()
         return sample, target_class
+
+        #### is it???
 
 
 

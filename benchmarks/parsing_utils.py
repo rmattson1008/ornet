@@ -34,6 +34,12 @@ def make_parser(default_config_files=[".my_settings"]):
     )
 
     parser.add_argument(
+        '--shuffle', 
+        action='store_true',
+        help='shuffle data',
+    )
+
+    parser.add_argument(
         "--cuda",
         type=int,
         default=-1,
@@ -50,6 +56,10 @@ def make_parser(default_config_files=[".my_settings"]):
 
     parser.add_argument(
         "--lr", type=float, default=1e-3, metavar="lr", help="learning rate"
+    )
+     
+    parser.add_argument(
+        "--weight_decay", type=float, default=0, metavar="wd", help="wieght decay for ADAM"
     )
 
     parser.add_argument(
@@ -102,16 +112,32 @@ def make_parser(default_config_files=[".my_settings"]):
     ) 
 
     parser.add_argument(
-            "--save",
+            "--save_model",
             type=str,
             default="",
             metavar="s",
             help="saves the weights to a given filepath",
         )
 
+    parser.add_argument(
+        "--save_features",
+        type=str,
+        default="",
+        metavar="s",
+        help="saves hooked features to given filepath",
+    )
+
+    parser.add_argument(
+        "--save_losses",
+        type=str,
+        default="",
+        metavar="s",
+        help="saves hooked features to given filepath",
+    )
+
     # args.root_dir = args.root_path if args.root_path[-1] == "/" else f"{args.root_path}/" 
     args = parser.parse_known_args()[0]
-    if args.save:
-        args.save = os.path.join(args.root_dir, args.save) # TODO - do u need to create folder?  
+    # if args.save_as:
+        # args.save_as = os.path.join(args.root_dir, args.save) # TODO - do u need to create folder?  
 
     return args, parser
