@@ -2,6 +2,7 @@ from typing import OrderedDict
 import torch
 from collections import OrderedDict 
 import torch.nn as nn
+import numpy as np
 from torch.nn import Linear, ReLU, ELU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Softmax, Module, BatchNorm2d, LeakyReLU
 
 
@@ -30,7 +31,7 @@ class BaseCNN(Module):
         #TODO check expansion
 
         # should be length of unwound channels * feature map dims
-                cnn_out_size = 4 * 20 * 20
+        cnn_out_size = 4 * 20 * 20
         
         self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 400), nn.ELU(), Linear(400, 10) , nn.ELU())
         # self.final_rep_layer = nn.Sequential(Linear(cnn_out_size, 1024), nn.ELU(), Linear(1024, 512) , nn.ELU(), Linear(512, 256) , nn.ELU(), Linear(256, 128) , nn.ELU(),  Linear( 128, 10) , nn.ELU())
@@ -58,7 +59,7 @@ class BaseCNN(Module):
 class CNN_LSTM(Module):
 
     def __init__(self, num_lstm_layers, bidirectional=False):
-        super(CNN_LSTM, self).__init__()
+        super().__init__()
         # self.lstm_hidden_size = lstm_hidden_size
         self.num_lstm_layers = num_lstm_layers
         self.bidirectional = bidirectional
@@ -95,11 +96,78 @@ class CNN_LSTM(Module):
             frames = self.cnn_layers(x[:, t, :, :, :])
             frames = torch.flatten(frames, start_dim=1)
             out, hidden_state = self.lstm(frames, hidden_state) # ???? this make no sense tbh
+            # I think the dim might be off? should still be [batch, t]. i think thats what this is
             # we are not saving the sequence of hidden states for one sample
             # nor are we sharing hidden states over batches
 
+        print(break_the_program)
+        # Honey isnt this the last of outputs the lstm? I'm not sure if this is one module of a sequence of them... 
         logits = self.linear_layers(out)
         return logits, hidden_state
+
+
+class CNN_Encoder(Module):
+
+    def __init__(self, number_of_frames=5, num_classes=2, device="cpu"):
+        super().__init__()
+        self.number_of_frames = number_of_frames
+        self.num_classes= num_classes
+        self.out_height = 16
+        # self.device = device
+
+        resnet18 = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
+        resnet18.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        resnet18.fc = torch.nn.Linear(512, self.out_height)
+
+        self.cnn_layers = resnet18
+        self.flattened_frames_size = self.number_of_frames * 1 * self.out_height
+        self.linear_layers = torch.nn.Linear(self.flattened_frames_size, self.num_classes)
+ 
+
+    def forward(self, x):
+        device = x.device
+        # hidden_state = None  # maybe actually init it, or use previous
+        # print("where is x", x.get_device())
+        assert self.number_of_frames ==  x.size(1)
+
+        # I want to classify like 3-5 frames
+    
+        frames = torch.empty((x.size(1), x.size(0) ,self.out_height)).to(device)
+        # batch, T, hieght
+
+        # frames = torch.empty((x.size(0), x.size(1), self.out_height)).to(device)
+        print("target frame ", frames.shape)
+        # frames = torch.empty(x.size(0), 1, 16).to(device)
+        
+        # frames = [self.cnn_layers(x[:, t, :, :, :]) for t in range(x.size(1))]
+        for t in range(self.number_of_frames):
+            # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
+            inp = x[:, t, :, :].unsqueeze(1)
+            print("inp", inp.shape)
+
+            frames[t] = self.cnn_layers(inp)
+            # out = self.cnn_layers(inp)
+            # print("out", out.shape)
+        frames = frames.permute((1,0,2))
+        print("final frame", frames.shape)
+# 
+
+            # next_frame = self.cnn_layers(inp)
+            # print("next frame", next_frame.shape)
+            # frames = torch.cat((frames, next_frame.unsqueeze()), dim=1)
+            # print("cat frame shape", frames.shape)
+
+            # just try flattening out everything. 
+            # I hate this cause it is not invariant to the order of the frame. 
+            # I guess thats fine. 
+            # so we get batch many vectors of output h * w * c * t = 2 * 2 * 1 * number_of_frames
+        flatten_frames_vector = frames.flatten(start_dim=1)
+        print("flat shape" ,flatten_frames_vector.shape)
+
+        logits = self.linear_layers(flatten_frames_vector)
+        return logits
+
+        # Just firgure out whats ot on the device.... 
       
 
 # class VGG_Model(Module):
