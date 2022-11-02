@@ -1,5 +1,5 @@
 import numpy as np
-from matplotlib import pyplot as plt
+from matplotlib import mathtext, pyplot as plt
 import os
 
 import torch
@@ -10,13 +10,333 @@ import torchvision.transforms.functional as TF
 import cv2
 import imageio
 import math
+from torchvision import transforms
+import pandas as pd
 
 
-#kinda slow, 4-ish seconds to read in each video in a dataloader. 
+# class TimeChunks2(Dataset):
+#     def __init__(self, path_to_folder, accept_list, num_chunks, frames_per_chunk=3 , step=3, class_types=['control', 'mdivi', 'llo'], transform=None):
+#         """
+#         Initializes dataset. For now samples all frames possible. could be more selective (undersample "overrepresented")
+
+#         use 2 frames for now but maybe 3 and then traditional cnn (still optomized for rbg tho not time)
+
+#         path_to_folder: path to directory containing 3 subdirectories. Folder names should match the class_types list
+#         accept_list: list of file names to use, in order to ignore data samples we dropped in past studies (for comparison). no option to disregard this list yet
+#         frames_per_chunk: number of frames in each intended sample. 
+
+#         """
+#         # landing place for X,y
+#         self.targets = []
+#         # save tuple ("path", starting idk, step)
+#         self.samples = []
+
+#         # self.vid_path = []
+#         # useful variables
+#         self.transform = transform
+#         # self.transform_input = transform_input
+#         self.class_types = class_types
+#         self.frames_per_chunk = frames_per_chunk
+#         self.step_size = step
+#         self.num_chunks = num_chunks
+
+#         path_to_folder = os.path.join(path_to_folder)
+#         print(path_to_folder)
+
+#         for label in self.class_types:
+            
+#             # yes fusion 1, yes fission = 0
+#             # if label == "control" or label == "llo":
+#             #     target = 1
+#             # elif label == "mdivi":
+#             #     target = 0
+#             if label == "control" or label == "mdivi":
+#                 target = 1
+#             elif label == "llo":
+#                 target = 0
+#             else:
+#                 print("could not place class")
+#                 # todo move this down and check llo indeces
+
+#             path = os.path.join(path_to_folder, label)
+#             files = os.listdir(path)
+#             for file_name in files:
+#                     if  file_name.split(".")[0] in accept_list:
+#                         #read vid, get length, discard vid
+#                         path_to_vid = os.path.join(path, file_name)
+#                         num_frames = len(np.load(path_to_vid))
+
+#                         l = range(0,num_frames)
+#                         #TODO - make there more of a break between samples
+#                         c_indeces = l[0:-9:self.frames_per_chunk * self.step_size *step]
+#                         # TODO - horrid way to handle irregular sizes
+
+#                         chunks = [(path_to_vid, start_idx) for start_idx in c_indeces]
+#                         targets = [target for x in chunks]
+
+#                         self.targets.extend(targets)
+#                         self.samples.extend(chunks)
+        
+#     def __len__(self):
+#         return len(self.targets)
+
+#     def get_y_dist(self):
+#         return self.targets
+
+    
+#     def __getitem__(self, idx):
+#         target = self.targets[idx]
+#         try:
+#             path, start_idx = self.samples[idx]
+#         except(IndexError):
+#             print("trying to access index", idx)
+#             print("samples is length", len(self.samples))
+#         else:
+#             path, start_idx = self.samples[idx]
+ 
+#         frames = np.load(path)
+        
+#         sample = frames[start_idx:start_idx + self.num_chunks * self.frames_per_chunk]
+#         sample = sample.reshape((self.num_chunks, self.frames_per_chunk, 512,512))
+#         sample = np.transpose(sample, (1, 2, 3, 0))
+#         print(sample.shape)
+
+#         # print(sample.shape)
+        
+#         # sample = np.transpose(sample, (1, 2, 3, 0))
+#         # sample = torch.as_tensor(sample)
+#         # print(sample.shape)
+
+
+#         # sample = torch.as_tensor(sample)
+#         # if you want it to be a smooth transformation need to rearrange the ndarray to be (H x W x C) before transforms
+#         if self.transform:
+#             sample = self.transform(sample)
+
+#         sample = sample.float()
+#         # t = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+#         return sample, target
+
+
+
+
+
+
+
+
+
+
+"""All pre-trained models expect input images normalized in the same way, 
+i.e. mini-batches of 3-channel RGB images of shape (3 x H x W), 
+where H and W are expected to be at least 224. The images have to be loaded 
+in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
+#  so its ok if the most immediate input is not between 0 and one? why so many negatives? 
+"""
+class TimeChunks(Dataset):
+    def __init__(self, path_to_folder, accept_list, frames_per_chunk=2 , step=1, class_types=['control', 'mdivi', 'llo'], transform=None):
+        """
+        Initializes dataset. For now samples all frames possible. could be more selective (undersample "overrepresented")
+
+        use 2 frames for now but maybe 3 and then traditional cnn (still optomized for rbg tho not time)
+
+        path_to_folder: path to directory containing 3 subdirectories. Folder names should match the class_types list
+        accept_list: list of file names to use, in order to ignore data samples we dropped in past studies (for comparison). no option to disregard this list yet
+        frames_per_chunk: number of frames in each intended sample. 
+
+        """
+        # landing place for X,y
+        self.targets = []
+        # save tuple ("path", starting idk, step)
+        self.samples = []
+
+        # self.vid_path = []
+        # useful variables
+        self.transform = transform
+        # self.transform_input = transform_input
+        self.class_types = class_types
+        self.frames_per_chunk = frames_per_chunk
+        self.step_size = step
+
+        path_to_folder = os.path.join(path_to_folder)
+        print(path_to_folder)
+        
+# TODO - trimmed llo, don't need separate folder just list of trimmed. 
+        samples = []
+        for label in self.class_types:
+            # print("label", label)
+            
+            # yes fusion 1, yes fission = 0
+            # if label == "control":
+                # target = 0
+
+            if label == "llo":
+                target = 0
+            elif label == "mdivi":
+                target = 1
+            else:
+                continue
+
+            # if label == "control" or label == "mdivi": #smh watch your incorrect boolean ors
+                # target = 1
+            # if label == "llo":
+            #     target = 0
+            # else:
+            #     target = 1
+            # else:
+            #     print("could not place class")
+                # todo move this down and check llo indeces
+
+            # print("TARGET", target)
+            path = os.path.join(path_to_folder, label)
+            files = os.listdir(path)
+            
+            for file_name in files:
+                    if  file_name.split(".")[0] in accept_list:
+                        #read vid, get length, discard vid
+                        path_to_vid = os.path.join(path, file_name)
+                        num_frames = len(np.load(path_to_vid))
+
+
+                        # frames = np.load(path_to_vid)[0].shape()
+                        # num_chunks = math.floor(num_frames / 2)
+
+
+                        l = range(0,num_frames)
+                        if target == 0:
+                            c_indeces = l[50:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                        elif target == 1:
+                            c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                        else:
+                            print("FIX UR DATASET")
+
+
+                        chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
+                        # chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
+                        # targets = [target for x in chunks]
+
+                        # self.targets.extend(targets)
+                        samples.extend(chunks)
+                        # print("APPENDING DATA")
+                        # print(chunks)
+                        # print(targets)
+
+                        # append c targets
+                        # append c frames
+
+                        # self.vid_path.append(os.path.join(path, file_name))
+                        # self.targets.append(target)
+
+                # np.random.permutation()
+
+
+            # I did this on 2 hours of sleep so dont keep
+        arr = pd.DataFrame(samples)
+        # print()
+        arr = arr.sample(frac=1, random_state=42)
+        # print(arr.head())
+
+        self.targets = arr[0].to_numpy()
+        self.samples = arr[[1, 2]].to_numpy()
+        # print(self.targets, "Target")
+        # print(self.samples[0], "Target")
+        # print("num train", len(self.targets))
+        # print("num train", len(self.samples))
+
+            
+        
+    def __len__(self):
+        return len(self.targets)
+
+    def get_y_dist(self):
+        return self.targets
+
+    
+    def __getitem__(self, idx):
+        target = self.targets[idx]
+        try:
+            path, start_idx = self.samples[idx]
+        except(IndexError):
+            print("trying to access index", idx)
+            print("samples is length", len(self.samples))
+        else:
+            path, start_idx = self.samples[idx]
+        
+ 
+        frames = np.load(path)
+        sample = frames[start_idx:start_idx + self.frames_per_chunk * self.step_size : self.step_size]
+        # C H W want T H W C
+        # sample = np.expand_dims(sample, 0)
+        # now C T H W
+        sample = np.transpose(sample, (1, 2, 0))
+        # print("sample", sample.shape)
+        # now T H W C
+
+        # sample = torch.as_tensor(sample)
+        # if you want it to be a smooth transformation need to rearrange the ndarray to be (H x W x C) before transforms
+        if self.transform:
+            # A = transforms.Resize(size=224)
+            # B = transforms.ToTensor()
+            # C = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            # print("starting transformations")
+            # print("base", type(sample))
+            # print("sample shape", sample.shape)
+
+
+            # sample = B(sample)
+            # print("after tensor", type(sample))
+            # print("sample shape", sample.shape)
+            # print("max", torch.max(sample))
+          
+
+            # sample = A(sample)
+            # print("after resize", type(sample))
+            # print("sample shape", sample.shape)
+
+            # sample = C(sample)
+            # print("after normalize", type(sample))
+            # print("sample shape", sample.shape)
+            # print("max", torch.max(sample))
+            sample = self.transform(sample)
+
+        sample = sample.float()
+        # t = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # print(sample.shape)
+        # sample = t(sample)
+        return sample, target
+        # target_class = self.targets[idx]
+        # # frames = vid_to_np_frames(self.vid_path[idx])
+        # frames = np.load(self.vid_path[idx])
+ 
+        # sample = torch.as_tensor(frames)
+
+        # # add channel choice - arbitrary 1 for now but could redo with n many channels
+        # sample = sample.unsqueeze(1)
+        # # print(sample.shape)
+        # # sample = torch.reshape(sample, (11,3,512,512))
+        # # print(sample.shape)
+       
+        # if self.transform:
+        #     sample = self.transform(sample)
+            
+        # # print(sample.shape)
+        # sample = torch.as_tensor(sample)
+        # sample = sample.float()
+        # return sample, target_class
+
+
+# now meant to load from numpy
+# TODO - change number to sample to chunk size? hmmm. have to handle different length sequence... 
+# might want to head back to avies to see if this is neccesary? 
 class DynamicVids(Dataset):
     def __init__(self, path_to_folder, accept_list, num_to_sample=10, class_types=['control', 'mdivi', 'llo'], transform=None):
         """
         Initializes dataset by finding paths to all videos
+
+        path_to_folder: path to directory containing 3 subdirectories. Folder names should match the class_types list
+        accept_list: list of file names to use, in order to ignore data samples we dropped in past studies (for comparison). no option to disregard this list yet
+        num_to_sample: number of frames to sample from the video.
+
         """
         self.targets= []
         self.vid_path = []
@@ -50,21 +370,23 @@ class DynamicVids(Dataset):
 
         # don't know how to handle subsampling from variable length vids.
         #maybe better to just use random choice, 
-        assert self.num_to_sample <= frames.shape[0]
-        assert self.num_to_sample <= 50 # frame selection is just gonna be brittle
-        if frames.shape[0] == 200:
-            step = math.ceil(frames.shape[0] / self.num_to_sample)
-            # step = round(frames.shape[0] / self.num_to_sample)
-            frames = frames[0:-1:step]
-        elif frames.shape[0] < 200:
-            # step = math.round(frames.shape[0] / self.num_to_sample)
-            step = math.floor(frames.shape[0] / self.num_to_sample)
-            frames = frames[0:-1:step]
-            # truncate some extras that show up due to floating point div
-            frames = frames[:self.num_to_sample]
-        else:
-            print("Why's your data got more than 200 frames I didn't train for this")
-        assert frames.shape[0] == self.num_to_sample
+        # assert self.num_to_sample <= frames.shape[0]
+        # assert self.num_to_sample <= 50 # frame selection is just gonna be brittle
+        # if self.num_to_sample == -1:
+        #     pass
+        # elif frames.shape[0] == 200:
+        #     step = math.ceil(frames.shape[0] / self.num_to_sample)
+        #     # step = round(frames.shape[0] / self.num_to_sample)
+        #     frames = frames[0:-1:step]
+        # elif frames.shape[0] < 200:
+        #     # step = math.round(frames.shape[0] / self.num_to_sample)
+        #     step = math.floor(frames.shape[0] / self.num_to_sample)
+        #     frames = frames[0:-1:step]
+        #     # truncate some extras that show up due to floating point div
+        #     frames = frames[:self.num_to_sample]
+        # else:
+        #     print("Why's your data got more than 200 frames I didn't train for this")
+        # assert frames.shape[0] == self.num_to_sample
 
 
 
@@ -140,6 +462,7 @@ class FramePairDataset(Dataset):
                     if file_name.split(".")[0] in accept_list:
                         self.vid_path.append(os.path.join(path, file_name))
                         self.targets.append(target)
+
         
     def __len__(self):
         return len(self.targets)
@@ -149,7 +472,7 @@ class FramePairDataset(Dataset):
         vid = np.load(self.vid_path[idx])
 
         sample = vid[0:2]
-        assert sample.shape == (2,512,512) 
+        # assert sample.shape == (2,512,512) 
 
         # TODO - will probably cause error during
         s = torch.as_tensor(sample)
@@ -213,3 +536,20 @@ class RoiTransform:
         # print("DEBUG: roi input size", cropped.size())
 
         return cropped
+
+def get_accept_list(path_to_intermediates, classes) -> list:
+    path_to_intermediates = "/data/ornet/gmm_intermediates"
+    accept_list = []
+    class_vector = []
+    for subdir in classes:
+            path = os.path.join(path_to_intermediates, subdir)
+            files = os.listdir(path)
+            lst = [x.split(".")[0]for x in files if 'normalized' in x]
+            if subdir is not 'control':
+                accept_list.extend(lst)
+                class_vector.extend([subdir for l in lst])
+
+            # mdivi1 :100
+            # mdivi2 100:
+
+    return accept_list, class_vector
