@@ -11,3 +11,6 @@ htmlcov
 **.pyc
 **.DS_Store
 helper.py
+*.pkl
+*.pth
+events.*
