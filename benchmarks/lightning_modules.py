@@ -14,6 +14,7 @@ import pickle
 
 from kornia import image_to_tensor, tensor_to_image
 from kornia.augmentation import ColorJitter, RandomChannelShuffle, RandomThinPlateSpline, RandomHorizontalFlip, RandomVerticalFlip, ColorJiggle
+import kornia.augmentation as K
 
 class DataAugmentation(nn.Module):
     """Module to perform data augmentation using Kornia on torch tensors."""
@@ -22,19 +23,19 @@ class DataAugmentation(nn.Module):
         super().__init__()
         self._apply_color_jitter = apply_color_jitter
 
-        self.transforms = nn.Sequential(
-            ColorJiggle(0.1, 0.1, 0.1, 0.1, p=1.0),
+        self.transforms = K.VideoSequential(
+            # ColorJiggle(0.1, 0.1, 0.1, 0.1, p=.5),
             RandomHorizontalFlip(p=0.5),
             # RandomVerticalFlip(p=0.5),
             # RandomChannelShuffle(p=0.75),
-            RandomThinPlateSpline(p=0.75),
+            RandomThinPlateSpline(p=0.5),
         )
 
         self.jitter = ColorJitter(0.5, 0.5, 0.5, 0.5)
 
     @torch.no_grad()  # disable gradients for effiency
     def forward(self, x) :
-        print("transforming image")
+        # print("transforming image")
         x_out = self.transforms(x)  # BxCxHxW
         if self._apply_color_jitter:
             x_out = self.jitter(x_out)
@@ -84,6 +85,17 @@ class CNN_Module(pl.LightningModule):
     def forward(self, x):
         # I want to classify like 3-5 frames
         frames = torch.empty((x.size(1), x.size(0) ,self.out_height)).type_as(x)
+
+        # This chunk is pretty gross, should just keep dummy channel dim
+        # print(x.shape)
+        x = x.unsqueeze(dim=1)
+        # print(x.shape)
+        x = self.transform(x)
+        # print(x.shape)
+        x = x.squeeze(dim=1)
+        # print(x.shape)
+
+        
 
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
@@ -190,7 +202,7 @@ class CNN_Module(pl.LightningModule):
 
 
 class CnnLSTM_Module(pl.LightningModule):
-    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model"):
+    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False):
         super().__init__()
         self.register_buffer("sigma", torch.eye(3))
         self.number_of_frames = number_of_frames
@@ -202,6 +214,7 @@ class CnnLSTM_Module(pl.LightningModule):
         self.label = label
         self.transform = DataAugmentation()
         self.hidden_layer_size = 128
+        self.dropout = dropout
         # self.val_bin_accuracy = torchmetrics.BinaryAccuracy()
 
         self.lr = learning_rate
@@ -213,11 +226,13 @@ class CnnLSTM_Module(pl.LightningModule):
 
         resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
         # resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
-        # print(resnet)
+        print(resnet)
         resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         # resnet.fc = torch.nn.Linear(2048, self.out_height,bias=.6)
         resnet.fc = torch.nn.Linear(512, self.out_height)
-        # resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+        if self.dropout:
+            resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
 
 
         self.cnn_layers = resnet
@@ -225,11 +240,24 @@ class CnnLSTM_Module(pl.LightningModule):
 
         # self.flattened_frames_size = self.number_of_frames * 1 * self.out_height.... what is out size?
         self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.hidden_layer_size * self.number_of_frames, 10), torch.nn.Linear(10, self.num_classes) )
+        if self.dropout:
+            # pass
+            print('Using dropout')
+            self.linear_layers[0].register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
        
 
     def forward(self, x):
         # I want to classify like 3-5 frames
         frames = torch.empty((x.size(1), x.size(0) , self.out_height)).type_as(x)
+
+        # This chunk is pretty gross, should just keep dummy channel dim
+        # print(x.shape)
+        x = x.unsqueeze(dim=1)
+        # print(x.shape)
+        x = self.transform(x)
+        # print(x.shape)
+        x = x.squeeze(dim=1)
+        # print(x.shape)
 
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
