@@ -134,7 +134,7 @@ in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] a
 #  so its ok if the most immediate input is not between 0 and one? why so many negatives? 
 """
 class TimeChunks(Dataset):
-    def __init__(self, path_to_folder, accept_list, frames_per_chunk=2 , step=1, class_types=['control', 'mdivi', 'llo'], transform=None):
+    def __init__(self, path_to_folder, accept_list, frames_per_chunk=2 , step=1, class_types=['control', 'mdivi', 'llo'], transform=None, verbose=False):
         """
         Initializes dataset. For now samples all frames possible. could be more selective (undersample "overrepresented")
 
@@ -157,6 +157,7 @@ class TimeChunks(Dataset):
         self.class_types = class_types
         self.frames_per_chunk = frames_per_chunk
         self.step_size = step
+        self.verbose = verbose
 
         path_to_folder = os.path.join(path_to_folder)
         print(path_to_folder)
@@ -253,7 +254,7 @@ class TimeChunks(Dataset):
 
     
     def __getitem__(self, idx):
-        target = self.targets[idx]
+        
         try:
             path, start_idx = self.samples[idx]
         except(IndexError):
@@ -261,10 +262,18 @@ class TimeChunks(Dataset):
             print("samples is length", len(self.samples))
         else:
             path, start_idx = self.samples[idx]
+        end_index = start_idx + self.frames_per_chunk * self.step_size 
         
+        if self.verbose:
+            target = {'label':self.targets[idx],'vid_path': path, 'range':(start_idx, end_index), 'step': self.step_size }
+        else:
+            target = self.targets[idx]
+        
+
  
         frames = np.load(path)
-        sample = frames[start_idx:start_idx + self.frames_per_chunk * self.step_size : self.step_size]
+       
+        sample = frames[start_idx:end_index:self.step_size]
         # C H W want T H W C
         # sample = np.expand_dims(sample, 0)
         # now C T H W
@@ -275,28 +284,6 @@ class TimeChunks(Dataset):
         # sample = torch.as_tensor(sample)
         # if you want it to be a smooth transformation need to rearrange the ndarray to be (H x W x C) before transforms
         if self.transform:
-            # A = transforms.Resize(size=224)
-            # B = transforms.ToTensor()
-            # C = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            # print("starting transformations")
-            # print("base", type(sample))
-            # print("sample shape", sample.shape)
-
-
-            # sample = B(sample)
-            # print("after tensor", type(sample))
-            # print("sample shape", sample.shape)
-            # print("max", torch.max(sample))
-          
-
-            # sample = A(sample)
-            # print("after resize", type(sample))
-            # print("sample shape", sample.shape)
-
-            # sample = C(sample)
-            # print("after normalize", type(sample))
-            # print("sample shape", sample.shape)
-            # print("max", torch.max(sample))
             sample = self.transform(sample)
 
         sample = sample.float()
