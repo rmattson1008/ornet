@@ -61,7 +61,7 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, step =1, resize=224):
     test_dataset = TimeChunks(args.input_dir, accept_list=X_test, frames_per_chunk=frames_per_chunk, step=step,  transform=transform)  
     val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=step,   transform=transform)  
 
-    train_dataloader = DataLoader(train_dataset,sampler=None, batch_size=args.batch_size)
+    train_dataloader = DataLoader(train_dataset,sampler=None, batch_size=args.batch_size, num_workers=4)
     test_dataloader = DataLoader(test_dataset,sampler=None, batch_size=args.batch_size)
     val_dataloader = DataLoader(val_dataset,sampler=None, batch_size=args.batch_size)
 
@@ -71,6 +71,7 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, step =1, resize=224):
 if __name__ == "__main__":
     args, _ = make_parser()
     torch.cuda.empty_cache()
+    pl.seed_everything(42, workers=True)
 
     hyper_parameters = dict(
         lr=[ 0.000001],
@@ -83,7 +84,7 @@ if __name__ == "__main__":
         # batch_size=[16, 32, 64, 91],
         # batch_size=[91, 64, 32, 16],
         # batch_size=[64, 16],
-        batch_size=[32],
+        batch_size=[16],
         time_steps=[5],
         # batch_size=[ ],
         # batch_size=[91],
@@ -94,7 +95,7 @@ if __name__ == "__main__":
         # roi=[False],
         # wd = [0.2, 0.1, 0],
         # wd = [.1],
-        wd =  [0, 0.1, 0.01],
+        wd =  [0.01],
         # shuffle=[True, False]
         shuffle=[False]
     )
@@ -111,14 +112,14 @@ if __name__ == "__main__":
         time_steps=5
         step=1
 
-        comment = f' batch_size = {args.batch_size} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={step} lstm-kornia'
-        model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label=comment)
+        comment = f' batch_size = {args.batch_size} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={step} lstm-kornia-drop'
+        model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label=comment, dropout=True)
         # model = CNN_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label= "e-5")
         logger = TensorBoardLogger("tb_logs", name=comment)
 
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
-        trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=False)
-        # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
+        # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=False)
+        trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
             args,frames_per_chunk=time_steps, step=step, resize=224)
         
