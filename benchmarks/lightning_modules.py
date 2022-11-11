@@ -24,13 +24,16 @@ class DataAugmentation(nn.Module):
         self._apply_color_jitter = apply_color_jitter
 
         self.transforms = K.VideoSequential(
+            K.Normalize([0.0024, 0.0024, 0.0024, 0.0024, 0.0024], [0.0149, 0.0149, 0.0150, 0.0150, 0.0150], p=1.0),
             # ColorJiggle(0.1, 0.1, 0.1, 0.1, p=.5),
             RandomHorizontalFlip(p=0.5),
-            # RandomVerticalFlip(p=0.5),
+            RandomVerticalFlip(p=0.5),
             # RandomChannelShuffle(p=0.75),
             RandomThinPlateSpline(p=0.5),
+            # RandomGaussianNoise
+            # RandomPlasmaShadow
         )
-
+# tensor([0.0024, 0.0024, 0.0024, 0.0024, 0.0024]) tensor([0.0149, 0.0149, 0.0150, 0.0150, 0.0150])
         self.jitter = ColorJitter(0.5, 0.5, 0.5, 0.5)
 
     @torch.no_grad()  # disable gradients for effiency
@@ -42,7 +45,7 @@ class DataAugmentation(nn.Module):
         return x_out
 
 class CNN_Module(pl.LightningModule):
-    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model"):
+    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False):
         super().__init__()
         self.register_buffer("sigma", torch.eye(3))
         self.number_of_frames = number_of_frames
@@ -53,6 +56,7 @@ class CNN_Module(pl.LightningModule):
         self.test_accuracy = torchmetrics.Accuracy()
         self.label = label
         self.transform = DataAugmentation()
+        self.dropout = dropout
         # self.val_bin_accuracy = torchmetrics.BinaryAccuracy()
 
         self.lr = learning_rate
@@ -64,23 +68,43 @@ class CNN_Module(pl.LightningModule):
 
         resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
         # resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
-        # print(resnet)
+        # inception_v3
+        
+        # print(squeeze)
         resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         # resnet.fc = torch.nn.Linear(2048, self.out_height,bias=.6)
         resnet.fc = torch.nn.Linear(512, self.out_height)
         # resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+        if self.dropout:
+            resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+        
+        squeeze = torch.hub.load('pytorch/vision:v0.10.0', 'squeezenet1_0', pretrained=False)
+        print(squeeze)
+        # resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        squeeze.features[0] = Conv2d(1, 96, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        # resnet.fc = torch.nn.Linear(2048, self.out_height,bias=.6)
+        # resnet.fc = torch.nn.Linear(512, self.out_height)
+        # squeeze.classifier = torch.nn.Linear(512, self.out_height)
+        self.fc = torch.nn.Linear(1000, self.out_height)
+        if self.dropout:
+            # resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            # resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            squeeze.classifier.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+        print(squeeze)
 
-        # vgg = torch.hub.load('pytorch/vision:v0.10.0', 'vgg11', pretrained=False)
-        # vgg.classifier = torch.nn.Linear(25088, self.out_height)
-        # # print(vgg)
-
-        self.cnn_layers = resnet
+        self.cnn_layers = squeeze
         # self.cnn_layers = vgg
         self.flattened_frames_size = self.number_of_frames * 1 * self.out_height
         self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, 10), torch.nn.Linear(10, self.num_classes) )
         # self.linear_layers.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
         # self.alt_linear_layer
+        if self.dropout:
+            # pass
+            print('Using dropout')
+            self.linear_layers[0].register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
  
+
 
     def forward(self, x):
         # I want to classify like 3-5 frames
@@ -99,7 +123,7 @@ class CNN_Module(pl.LightningModule):
 
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
-            frames[t] = self.cnn_layers(x[:, t, :, :].unsqueeze(1))
+            frames[t] = self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
         # frames = self.cnn_layers(x)
 
         frames = frames.permute((1,0,2))
@@ -224,18 +248,36 @@ class CnnLSTM_Module(pl.LightningModule):
         # self.save_hyperparameters()
         # self.device = device
 
-        resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
         # resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
-        print(resnet)
-        resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        # resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=False)
+        squeeze = torch.hub.load('pytorch/vision:v0.10.0', 'squeezenet1_0', pretrained=False)
+        print(squeeze)
+        # resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        squeeze.features[0] = Conv2d(1, 96, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         # resnet.fc = torch.nn.Linear(2048, self.out_height,bias=.6)
-        resnet.fc = torch.nn.Linear(512, self.out_height)
+        # resnet.fc = torch.nn.Linear(512, self.out_height)
+        # squeeze.classifier = torch.nn.Linear(512, self.out_height)
+        self.fc = torch.nn.Linear(1000, self.out_height)
         if self.dropout:
-            resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
-            resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            # resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            # resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            squeeze.classifier.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+        print(squeeze)
 
 
-        self.cnn_layers = resnet
+
+# ok its still in 2d form here
+#  )
+#   (classifier): Sequential(
+#     (0): Dropout(p=0.5, inplace=False)
+#     (1): Conv2d(512, 1000, kernel_size=(1, 1), stride=(1, 1))
+#     (2): ReLU(inplace=True)
+#     (3): AdaptiveAvgPool2d(output_size=(1, 1))
+#   )
+# )
+
+        # self.cnn_layers = resnet
+        self.cnn_layers = squeeze
         self.lstm = nn.LSTM(self.out_height,self.hidden_layer_size, 1)
 
         # self.flattened_frames_size = self.number_of_frames * 1 * self.out_height.... what is out size?
@@ -258,11 +300,13 @@ class CnnLSTM_Module(pl.LightningModule):
         # print(x.shape)
         x = x.squeeze(dim=1)
         # print(x.shape)
-
+        # if self.verbose:
+        # print('transformed batch')
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
-            frames[t] = self.cnn_layers(x[:, t, :, :].unsqueeze(1))
-
+            # print(x[:, t, :, :].unsqueeze(1).shape)
+            frames[t] =  self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
+        # print('applied cnn')
         # frames = frames.permute((1,0,2))
         # print(frames.shape)
         # flatten_frames_vector = frames.flatten(start_dim=1)
@@ -274,12 +318,14 @@ class CnnLSTM_Module(pl.LightningModule):
         c0 = torch.randn(1,frames.size(1), self.hidden_layer_size).type_as(x)
         out, (hn, cn) = self.lstm(frames)
         out = out.permute((1,0,2))
+        # print('applied lstm')
         # print(out.shape)
         #could pool or do some sort of transform thing
         out = out.flatten(start_dim=1)
         # print(out.shape)
 
         logits = self.linear_layers(out)
+        # print('applied classifier')
         return logits
 
     def configure_optimizers(self):
