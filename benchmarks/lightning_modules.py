@@ -15,6 +15,72 @@ import pickle
 from kornia import image_to_tensor, tensor_to_image
 from kornia.augmentation import ColorJitter, RandomChannelShuffle, RandomThinPlateSpline, RandomHorizontalFlip, RandomVerticalFlip, ColorJiggle
 import kornia.augmentation as K
+import matplotlib.pyplot as plt
+import matplotlib
+import logging
+
+
+def get_embedding_plot(embeddings, targets, preds, name):
+    """
+    truly some shitty code
+    """
+    print("getting plot...")
+    xs = []
+    ys = []
+    zs = []
+    labels = []
+    m = ['^', 'o', 'x']
+    p = []
+
+    points = []
+
+    for batch in embeddings:
+        points.extend(batch.numpy())
+        batch = batch.permute(1,0)
+        # print(batch.shape)
+        xs.extend(batch[0].numpy())
+        ys.extend(batch[1].numpy())
+        # zs.extend(batch[2].numpy())
+
+    for batch in targets:
+        # batch = batch.permute(1,0)
+        # print(batch.shape)
+        labels.extend(batch.numpy())
+
+    for batch in preds:
+        # print(batch.shape)
+        # batch = batch.permute(1,0)
+        for fuc in batch: 
+            fuc = fuc.argmax(axis=0)
+        
+            p.append(fuc.item())
+    
+
+    # colors = ['red','blue','purple']
+    colors = ['red','blue']
+
+    np.random.seed(42)
+    fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    ax = fig.add_subplot()
+    ax.scatter(xs, ys, c=labels, cmap=matplotlib.colors.ListedColormap(colors))
+    # ax.scatter(k1[0], k1[1])
+    # ax.scatter(k2[0], k2[1])
+    # plt.scatter([x[0]], [x[1]])
+    plt.title(name)
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
+    # ax.invert_yaxis()
+
+    
+    return plt.gcf()
+    # return plt
+
+
+
+
+    
 
 class DataAugmentation(nn.Module):
     """Module to perform data augmentation using Kornia on torch tensors."""
@@ -29,7 +95,7 @@ class DataAugmentation(nn.Module):
             RandomHorizontalFlip(p=0.5),
             RandomVerticalFlip(p=0.5),
             # RandomChannelShuffle(p=0.75),
-            RandomThinPlateSpline(p=0.5),
+            # RandomThinPlateSpline(p=0.5),
             # RandomGaussianNoise
             # RandomPlasmaShadow
         )
@@ -58,6 +124,15 @@ class CNN_Module(pl.LightningModule):
         self.transform = DataAugmentation()
         self.dropout = dropout
         # self.val_bin_accuracy = torchmetrics.BinaryAccuracy()
+
+        # logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+
+        # self.logger = init_logger("dnn", notebook=True)
+        # self.logger = logging.getLogger("pytorch_lightning.core")
+
+    # configure logging on module level, redirect to file
+        # self.tensorboard = self.logger.experiment
+       
 
         self.lr = learning_rate
         print("using learning rate ", self.lr)
@@ -108,10 +183,11 @@ class CNN_Module(pl.LightningModule):
 
     def forward(self, x):
         # I want to classify like 3-5 frames
-        frames = torch.empty((x.size(1), x.size(0) ,self.out_height)).type_as(x)
+        frames = torch.empty((x.size(1), x.size(0), self.out_height)).type_as(x)
 
         # This chunk is pretty gross, should just keep dummy channel dim
         # print(x.shape)
+        self.logger.experiment.add_image("test image before transform", x[0][0].unsqueeze(dim=0))
         x = x.unsqueeze(dim=1)
         # print(x.shape)
         x = self.transform(x)
@@ -119,7 +195,8 @@ class CNN_Module(pl.LightningModule):
         x = x.squeeze(dim=1)
         # print(x.shape)
 
-        
+        # print("shape", x[0][0].unsqueeze(dim=0).shape)
+        self.logger.experiment.add_image("test image", x[0][0].unsqueeze(dim=0))
 
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
@@ -182,6 +259,7 @@ class CNN_Module(pl.LightningModule):
         pred = y_hat.softmax(dim=-1)
         # print("val preds", preds)
         self.test_accuracy(pred, y)
+
         return {'loss':loss, 'pred': pred, 'target': y, 'embed': y_hat}
         # return pred
 
@@ -213,13 +291,19 @@ class CNN_Module(pl.LightningModule):
         # embeds = torch.cat((e_1, e_2))
         # list of steps(list of batch parts(array of embeddings))
         # embeds = outputs
-        with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
-            pickle.dump(embeds, fp)
-        with open("embeddings/" + self.label +"_targets.pkl", "wb") as fp:   #Pickling
-            pickle.dump(targets, fp)
-        with open("embeddings/" + self.label +"_preds.pkl", "wb") as fp:   #Pickling
-            pickle.dump(preds, fp)
+        plot = get_embedding_plot(embeds, targets, preds, self.label)
+        # print("saving embeddings")
+        # with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
+        #     pickle.dump(embeds, fp)
+        # with open("embeddings/" + self.label +"_targets.pkl", "wb") as fp:   #Pickling
+        #     pickle.dump(targets, fp)
+        # with open("embeddings/" + self.label +"_preds.pkl", "wb") as fp:   #Pickling
+            # pickle.dump(preds, fp)
         # self.test_accuracy(outputs['pred'], outputs['target'])
+
+
+    
+        self.logger.experiment.add_figure("test figure", plot)
         print('test_accuracy', self.test_accuracy.compute())
         return
 
@@ -285,7 +369,7 @@ class CnnLSTM_Module(pl.LightningModule):
         if self.dropout:
             # pass
             print('Using dropout')
-            self.linear_layers[0].register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+            self.linear_layers[0].register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.25, training=m.training))
        
 
     def forward(self, x):
@@ -405,14 +489,18 @@ class CnnLSTM_Module(pl.LightningModule):
         # embeds = torch.cat((e_1, e_2))
         # list of steps(list of batch parts(array of embeddings))
         # embeds = outputs
-        print("saving embeddings")
-        with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
-            pickle.dump(embeds, fp)
-        with open("embeddings/" + self.label +"_targets.pkl", "wb") as fp:   #Pickling
-            pickle.dump(targets, fp)
-        with open("embeddings/" + self.label +"_preds.pkl", "wb") as fp:   #Pickling
-            pickle.dump(preds, fp)
+        plot = get_embedding_plot(embeds, targets, preds, self.label)
+        # print("saving embeddings")
+        # with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
+        #     pickle.dump(embeds, fp)
+        # with open("embeddings/" + self.label +"_targets.pkl", "wb") as fp:   #Pickling
+        #     pickle.dump(targets, fp)
+        # with open("embeddings/" + self.label +"_preds.pkl", "wb") as fp:   #Pickling
+            # pickle.dump(preds, fp)
         # self.test_accuracy(outputs['pred'], outputs['target'])
+
+
+        self.logger.experiment.add_figure("test figure", plot)
         print('test_accuracy', self.test_accuracy.compute())
         return
 
