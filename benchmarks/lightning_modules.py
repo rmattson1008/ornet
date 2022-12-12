@@ -18,6 +18,57 @@ import kornia.augmentation as K
 import matplotlib.pyplot as plt
 import matplotlib
 import logging
+from sklearn.mixture import GaussianMixture as GMM
+
+def get_mm_memberships(embeddings):
+    """
+    So this is probably where I want to see where test videos or control videos fit in to the mm memberships. 
+    It would be nice to project the memberships between -1 and 1, and plot how those change over time. 
+    Not sure that the test dataset is ready for this tho...
+    Got to review gmm outputs...
+    I guess to start I could simply plot the membership on two axes
+    Then switch to a view over time.
+    """
+
+    # again the intermediate state here is crappy
+    points = []    
+    for batch in embeddings:
+        points.extend(batch.numpy())
+    points = np.stack(points)
+    # temp - look at one video
+    # print(points.shape)
+    gmm = GMM(n_components=2, random_state=0).fit(points)
+    print("GMM fit metrics")
+    print("bic" , gmm.bic(points))
+    print("aic", gmm.aic(points))
+   
+    membership_probs = gmm.predict_proba(points)[:10]
+    print(membership_probs.shape)
+
+
+    prob_diff = [p[0] - p[1] for p in membership_probs]
+
+    probax1 = [p[0] for p in membership_probs ]
+    probax2 = [p[1] for p in membership_probs ]
+
+    # colors = ['red','blue']
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    ax.scatter( range(0,len(prob_diff)), prob_diff)
+    ax.plot(range(0,len(prob_diff)), prob_diff)
+
+    plt.title("GMM membership")
+    ax.set_ylabel('membership prob diff')
+    ax.set_xlabel('time stamp')
+    # ax.set_zlabel('Z Label')
+    # ax.invert_yaxis()
+
+    
+    return plt.gcf()
+
+
+
+    return membership_probs
 
 
 def get_embedding_plot(embeddings, targets, preds, name):
@@ -260,7 +311,8 @@ class CNN_Module(pl.LightningModule):
         self.log('val_loss', outputs['loss'], sync_dist=True)
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, verbose_y = batch
+        y = verbose_y['label']
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y)
         # self.log('validation_loss', val_loss, on_step=True, on_epoch=True, sync_dist=True)
@@ -273,33 +325,20 @@ class CNN_Module(pl.LightningModule):
     
     def test_epoch_end(self, outputs):
        
-        # print(type(outputs))
-        # print(len(outputs))
-        # print(type(outputs[0]))
         embeds = [x['embed'].cpu().to('cpu') for x in outputs] 
         targets = [x['target'].cpu().to('cpu') for x in outputs] 
         preds = [x['pred'].cpu().to('cpu') for x in outputs] 
-        # print(type(embeds))
-        # print(type(embeds[0]))
-        # print(type(outputs['embed'].shape))
-        # e_1 = outputs['embed']
-        # e_2 = outputs['embed']
-        # embeds = torch.cat((e_1, e_2))
-        # list of steps(list of batch parts(array of embeddings))
-        # embeds = outputs
-        plot = get_embedding_plot(embeds, targets, preds, self.label)
-        # print("saving embeddings")
-        # with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
-        #     pickle.dump(embeds, fp)
-        # with open("embeddings/" + self.label +"_targets.pkl", "wb") as fp:   #Pickling
-        #     pickle.dump(targets, fp)
-        # with open("embeddings/" + self.label +"_preds.pkl", "wb") as fp:   #Pickling
-            # pickle.dump(preds, fp)
-        # self.test_accuracy(outputs['pred'], outputs['target'])
-
-
     
+        plot = get_embedding_plot(embeds, targets, preds, self.label)
         self.logger.experiment.add_figure("test embedding", plot)
+
+        # TODO - HERE
+        mm_plot = get_mm_memberships(embeds)
+        # print(mm_out)
+        self.logger.experiment.add_figure("mm", mm_plot)
+
+
+
         print('test_accuracy', self.test_accuracy.compute())
         return
 
@@ -449,7 +488,10 @@ class CnnLSTM_Module(pl.LightningModule):
         self.log('val_loss', outputs['loss'], sync_dist=True)
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, verbose_y = batch
+        y = verbose_y['label']
+        print("my y", y)
+
         y_hat = self(x)
         loss = F.cross_entropy(y_hat, y)
         # self.log('validation_loss', val_loss, on_step=True, on_epoch=True, sync_dist=True)
