@@ -123,6 +123,7 @@ class CNN_Module(pl.LightningModule):
         self.label = label
         self.transform = DataAugmentation()
         self.dropout = dropout
+        self.show_image = True
         # self.val_bin_accuracy = torchmetrics.BinaryAccuracy()
 
         # logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
@@ -155,7 +156,7 @@ class CNN_Module(pl.LightningModule):
             resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
         
         squeeze = torch.hub.load('pytorch/vision:v0.10.0', 'squeezenet1_0', pretrained=False)
-        print(squeeze)
+        # print(squeeze)
         # resnet.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         squeeze.features[0] = Conv2d(1, 96, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         # resnet.fc = torch.nn.Linear(2048, self.out_height,bias=.6)
@@ -166,7 +167,7 @@ class CNN_Module(pl.LightningModule):
             # resnet.avgpool.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
             # resnet.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
             squeeze.classifier.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
-        print(squeeze)
+        # print(squeeze)
 
         self.cnn_layers = squeeze
         # self.cnn_layers = vgg
@@ -187,7 +188,8 @@ class CNN_Module(pl.LightningModule):
 
         # This chunk is pretty gross, should just keep dummy channel dim
         # print(x.shape)
-        self.logger.experiment.add_image("test image before transform", x[0][0].unsqueeze(dim=0))
+        # if self.image_count == 0:
+
         x = x.unsqueeze(dim=1)
         # print(x.shape)
         x = self.transform(x)
@@ -195,8 +197,15 @@ class CNN_Module(pl.LightningModule):
         x = x.squeeze(dim=1)
         # print(x.shape)
 
+        #ya this is just tryna force the image 
+        if self.show_image:
+            print("printing")
+            image_to_print = x[0][0].clone().detach().unsqueeze(dim=0)
+            self.logger.experiment.add_image("train image before transform",image_to_print )
+            self.show_image = False
         # print("shape", x[0][0].unsqueeze(dim=0).shape)
-        self.logger.experiment.add_image("test image", x[0][0].unsqueeze(dim=0))
+        # with optimizer.zero_grad:
+        # self.logger.experiment.add_image("train image", x[0][0].unsqueeze(dim=0).detach())
 
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
@@ -213,7 +222,6 @@ class CNN_Module(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
-        #TODO- use my args
         return optimizer
 
 
@@ -262,18 +270,6 @@ class CNN_Module(pl.LightningModule):
 
         return {'loss':loss, 'pred': pred, 'target': y, 'embed': y_hat}
         # return pred
-
-    # def test_step_end(self, outputs):
-    #     self.test_accuracy(outputs['pred'], outputs['target'])
-        # print(type(outputs))
-        # print(len(outputs))
-        # print(type(outputs[]))
-        # embeds = [x['embed'] for x in outputs]
-        
-        # print(type(embed))
-        # print('test_accuracy', self.test_accuracy.compute())
-        # self.log('test_accuracy', self.test_accuracy)
-        # return {'embed', outputs['embed']}
     
     def test_epoch_end(self, outputs):
        
@@ -303,9 +299,23 @@ class CNN_Module(pl.LightningModule):
 
 
     
-        self.logger.experiment.add_figure("test figure", plot)
+        self.logger.experiment.add_figure("test embedding", plot)
         print('test_accuracy', self.test_accuracy.compute())
         return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -323,6 +333,7 @@ class CnnLSTM_Module(pl.LightningModule):
         self.transform = DataAugmentation()
         self.hidden_layer_size = 128
         self.dropout = dropout
+        self.show_image = True
         # self.val_bin_accuracy = torchmetrics.BinaryAccuracy()
 
         self.lr = learning_rate
@@ -348,18 +359,6 @@ class CnnLSTM_Module(pl.LightningModule):
             squeeze.classifier.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
         print(squeeze)
 
-
-
-# ok its still in 2d form here
-#  )
-#   (classifier): Sequential(
-#     (0): Dropout(p=0.5, inplace=False)
-#     (1): Conv2d(512, 1000, kernel_size=(1, 1), stride=(1, 1))
-#     (2): ReLU(inplace=True)
-#     (3): AdaptiveAvgPool2d(output_size=(1, 1))
-#   )
-# )
-
         # self.cnn_layers = resnet
         self.cnn_layers = squeeze
         self.lstm = nn.LSTM(self.out_height,self.hidden_layer_size, 1)
@@ -378,33 +377,32 @@ class CnnLSTM_Module(pl.LightningModule):
 
         # This chunk is pretty gross, should just keep dummy channel dim
         # print(x.shape)
+        # self.logger.experiment.add_image("train image before transform", x[0][0].unsqueeze(dim=0))
         x = x.unsqueeze(dim=1)
         # print(x.shape)
         x = self.transform(x)
         # print(x.shape)
         x = x.squeeze(dim=1)
-        # print(x.shape)
-        # if self.verbose:
-        # print('transformed batch')
+
+        # self.logger.experiment.add_image("train image", x[0][0].unsqueeze(dim=0))
+        if self.show_image:
+            # print("printing")
+            image_to_print = x[0][0].clone().detach().unsqueeze(dim=0)
+            self.logger.experiment.add_image("train image before transform",image_to_print )
+            self.show_image = False
         for t in range(self.number_of_frames):
             # with torch.no_grad(): # i think we want to unfreeze the cnn. everyone else doing this uses pretrained cnn oh well.
             # print(x[:, t, :, :].unsqueeze(1).shape)
             frames[t] =  self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
-        # print('applied cnn')
-        # frames = frames.permute((1,0,2))
-        # print(frames.shape)
-        # flatten_frames_vector = frames.flatten(start_dim=1)
+
         frames = frames.flatten(start_dim=2)
-        # print(frames.shape)
 
         #todo, switch if bi
         h0 = torch.randn(1, frames.size(1), self.hidden_layer_size).type_as(x)
         c0 = torch.randn(1,frames.size(1), self.hidden_layer_size).type_as(x)
         out, (hn, cn) = self.lstm(frames)
         out = out.permute((1,0,2))
-        # print('applied lstm')
-        # print(out.shape)
-        #could pool or do some sort of transform thing
+
         out = out.flatten(start_dim=1)
         # print(out.shape)
 
@@ -460,36 +458,16 @@ class CnnLSTM_Module(pl.LightningModule):
         self.test_accuracy(pred, y)
         return {'loss':loss, 'pred': pred, 'target': y, 'embed': y_hat}
         # return pred
-
-    # def test_step_end(self, outputs):
-    #     self.test_accuracy(outputs['pred'], outputs['target'])
-        # print(type(outputs))
-        # print(len(outputs))
-        # print(type(outputs[]))
-        # embeds = [x['embed'] for x in outputs]
-        
-        # print(type(embed))
-        # print('test_accuracy', self.test_accuracy.compute())
-        # self.log('test_accuracy', self.test_accuracy)
-        # return {'embed', outputs['embed']}
     
     def test_epoch_end(self, outputs):
        
-        # print(type(outputs))
-        # print(len(outputs))
-        # print(type(outputs[0]))
         embeds = [x['embed'].cpu().to('cpu') for x in outputs] 
         targets = [x['target'].cpu().to('cpu') for x in outputs] 
         preds = [x['pred'].cpu().to('cpu') for x in outputs] 
-        # print(type(embeds))
-        # print(type(embeds[0]))
-        # print(type(outputs['embed'].shape))
-        # e_1 = outputs['embed']
-        # e_2 = outputs['embed']
-        # embeds = torch.cat((e_1, e_2))
-        # list of steps(list of batch parts(array of embeddings))
-        # embeds = outputs
+      
         plot = get_embedding_plot(embeds, targets, preds, self.label)
+
+
         # print("saving embeddings")
         # with open("embeddings/" + self.label +"_embeddings.pkl", "wb") as fp:   #Pickling
         #     pickle.dump(embeds, fp)
@@ -500,7 +478,7 @@ class CnnLSTM_Module(pl.LightningModule):
         # self.test_accuracy(outputs['pred'], outputs['target'])
 
 
-        self.logger.experiment.add_figure("test figure", plot)
+        self.logger.experiment.add_figure("test embedding", plot)
         print('test_accuracy', self.test_accuracy.compute())
         return
 
