@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import logging
 from sklearn.mixture import GaussianMixture as GMM
+from torch.nn import LSTM
 
 #please please please clean. 
 
@@ -62,7 +63,7 @@ class DataAugmentation(nn.Module):
         return x_out
 
 class CNN_Module(pl.LightningModule):
-    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False):
+    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False, aggregator='lstm'):
         super().__init__()
         self.register_buffer("sigma", torch.eye(3))
         self.number_of_frames = number_of_frames
@@ -78,6 +79,9 @@ class CNN_Module(pl.LightningModule):
         self.dropout = dropout
         self.show_image = False
         self.gmm = None
+        assert aggregator in ['flatten', 'lstm', 'mean']
+        self.aggregator_type = aggregator
+
         
     
         self.lr = learning_rate
@@ -89,8 +93,18 @@ class CNN_Module(pl.LightningModule):
 
         self.cnn_layers = squeeze
         self.fc = torch.nn.Linear(1000, self.out_height)
-        self.aggregator = torch.flatten
+
         self.flattened_frames_size = self.number_of_frames * 1 * self.out_height
+
+        if self.aggregator_type == 'flatten':
+            self.aggregator = torch.flatten
+        elif self.aggregator_type == 'lstm':
+            self.aggregator = nn.LSTM(self.out_height, self.flattened_frames_size, 1, batch_first=True)
+        elif self.aggregator_type == 'mean':
+            print("Set this up")
+            exit()
+
+
         self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.num_classes))
   
         # self.fc = torch.nn.Sequential(torch.nn.Linear(1000, self.out_height), torch.nn.Linear(self.out_height, self.out_height))
@@ -125,10 +139,18 @@ class CNN_Module(pl.LightningModule):
     
         for t in range(self.number_of_frames):
             frames[t] = self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
+        frames = frames.permute((1,0,2)) # restore batch order
 
-        #TODO - why do I have to do this... 
-        frames = frames.permute((1,0,2))
-        aggregated_frames = self.aggregator(frames, start_dim=1)
+
+        if self.aggregator_type == 'flatten': 
+            aggregated_frames = self.aggregator(frames, start_dim=1)
+            #TODO- how do I do fancy lambdas here.
+
+        if self.aggregator_type == 'lstm':
+            outputs, (hn, cn) = self.aggregator(frames)
+            aggregated_frames = hn[-1]
+    
+
 
         logits = self.linear_layers(aggregated_frames)
         return logits
@@ -367,40 +389,6 @@ class CNN_Module(pl.LightningModule):
         return
 
 
-
-
-
-
-# class LSTM(nn.Module):
-#     def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="lstm_model"):
-#         super().__init__()
-#         self.register_buffer("sigma", torch.eye(3))
-#         self.number_of_frames = number_of_frames
-#         self.num_classes= num_classes
-#         self.out_height = 128
-#         self.label = label
-#         self.hidden_layer_size = 128
-
-#         self.lstm = nn.LSTM(self.out_height,self.hidden_layer_size, 1)
-
-    
-#     def forward(self, frames):
-#         print(frames.shape)
-
-#         frames = frames.flatten(start_dim=2) #flattening the 2d image into one vector
-
-#         #todo, switch if bi
-#         h0 = torch.randn(1, frames.size(1), self.hidden_layer_size).type_as(x)
-#         c0 = torch.randn(1,frames.size(1), self.hidden_layer_size).type_as(x)
-#         out, (hn, cn) = self.lstm(frames)
-#         out = out.permute((1,0,2))#why??
-#         print(out.shape)
-
-#         out = out.flatten(start_dim=1) #why? do I really need this?
-#         print(out.shape)
-#         # print('applied classifier')
-#         # should be one point in space from 3
-#         return out
 
 
 """keep in mind a LightningModule is a nn.Module, so whenever you define a nn.Module as 
