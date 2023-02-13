@@ -18,6 +18,7 @@ events*
 *.pkl
 *.pth
 events.*
+*.npy
 
 data/*
 *logs*
