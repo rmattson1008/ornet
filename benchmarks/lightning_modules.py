@@ -1,4 +1,5 @@
 
+from pickletools import string1
 from typing import OrderedDict
 import torch
 from collections import OrderedDict 
@@ -72,7 +73,7 @@ class CNN_Module(pl.LightningModule):
         self.val_accuracy = torchmetrics.Accuracy()
         self.test_accuracy = torchmetrics.Accuracy()
         self.gmm_accuracy = torchmetrics.Accuracy()
-        self.label = label
+        self.annotation = label
         self.transform = DataAugmentation()
         self.dropout = dropout
         self.show_image = False
@@ -149,34 +150,23 @@ class CNN_Module(pl.LightningModule):
         return optimizer
 
     
-    def get_embedding_plot(self, embeddings, labels, preds, name):
+    def get_embedding_plot(self, points:torch.Tensor, labels:torch.Tensor, name:str) -> plt:
         """
         Get the an embedding from the final embedding (the decision space).
         """
-        # print("getting plot...")
         xs = []
         ys = []
 
-        labels = []
-        preds = []
-
-
-        points = self.batch2points(embeddings)
         temp = np.transpose(points)
         xs = temp[0]
         ys = temp[1]
-
-        for batch in preds:
-            for encoding in batch: 
-                label = encoding.argmax(axis=0)
-                preds.append(label.item())
         
         colors = ['red','blue']
 
         np.random.seed(42)
         fig = plt.figure()
         ax = fig.add_subplot()
-        ax.scatter(xs, ys, c=labels, cmap=matplotlib.colors.ListedColormap(colors))
+        ax.scatter(xs, ys, c=labels.tolist(), cmap=matplotlib.colors.ListedColormap(colors))
     
         plt.title(name)
         ax.set_xlabel('X Label')
@@ -184,25 +174,14 @@ class CNN_Module(pl.LightningModule):
 
         return plt.gcf()
 
-    def batch2points(self, l:torch.Tensor):
+    def batch2points(self, l:list)-> torch.tensor:
         """ Helper function for dealing with intermediate data structures across pl.lightning. 
-        Take a tensor that is a list-like object of batches, and convert it to a set of points (N, sample.shape).
+        Take a tensor that is a list-like object of tensor batches, and convert it to a set of points (N, sample.shape).
+        Should depreciate
 
         returns points: (N, sample.shape)
          """
-        
-        # never do it like this
-        # I think the pythonic way is to use reshape()??
-        # please redo before leaving this project
-        # this comment will probably live forever in the project
-
-        points = []   
-        for batch in l:
-            points.extend(batch)
-        points = np.stack(points)
-
-        # print("batch2points returned an array of shape", points.shape)
-        return points
+        return torch.cat(l,dim=0)
 
     def get_gmm_memberships(self, points: np.ndarray):
         print("entering the call to gmm")
@@ -210,33 +189,23 @@ class CNN_Module(pl.LightningModule):
         print(membership_probs.shape)
         return membership_probs
 
-    def get_gmm_preds(self, points:np.ndarray):
+    def get_gmm_preds(self, points:torch.Tensor) -> torch.Tensor:
         print("entering get gmm preds")
+        points = np.asanyarray(points)
         membership_probs = self.gmm.predict_proba(points)
         preds = membership_probs.argmax(axis=1)
-        return preds
+        return torch.tensor(preds)
 
     def get_gmm_imprint(self, n=100):   
         """ Given a fitted gmm, get a sample of the distribution"""
 
+        print("entering call to get gmm imprint")
         #TODO - dimension reduction. Right now its only hitting 2 of the frames * hidden_size tuple
         samples, labels = self.gmm.sample(n_samples=n)
         xxs = [x[0] for x in samples]
         yys = [x[1] for x in samples]
         plt.scatter(xxs, yys, c=labels)
-
-        # xxs = [x[2] for x in samples]
-        # yys = [x[3] for x in samples]
-        # plt.scatter(xxs, yys, c=labels)
-
-        # xxs = [x[4] for x in samples]
-        # yys = [x[5] for x in samples]
-        # plt.scatter(xxs, yys, c=labels)
-
-        # xxs = [x[6] for x in samples]
-        # yys = [x[7] for x in samples]
-        # plt.scatter(xxs, yys, c=labels)
-
+        
         return plt.gcf()
 
 
@@ -254,23 +223,6 @@ class CNN_Module(pl.LightningModule):
         return outputs
 
     def training_epoch_end(self, outputs):
-    
-        # embeds = [x['embeds'].detach().cpu().numpy() for x in outputs]
-        # get features
-        # Zs = [x['z'].detach().cpu().numpy().reshape(-1) for x in outputs]
-        # Zs = [x['z'].detach().cpu().numpy() for x in outputs]
-
-        # points = self.batch2points(Zs) 
-
-        # so ur getting a new model every time.
-        # print("right before fit:", points[0].shape, len(points), " samples")
-        # self.gmm = GMM(n_components=2, random_state=0).fit(points)
-        # print("GMM fit metrics")
-        # print("bic" , self.gmm.bic(points))
-        # print("aic", self.gmm.aic(points))
-        # sample_plot = self.get_gmm_imprint()
-        # self.logger.experiment.add_figure("gmm sample", sample_plot)
-        # self.log('gmm bic', self.gmm.bic(points),sync_dist=True)
         return
 
     def validation_step(self, batch, batch_idx):
@@ -288,11 +240,12 @@ class CNN_Module(pl.LightningModule):
         return outputs
 
     def validation_epoch_end(self, outputs):
-        embeds = [x['embeds'].detach().cpu().numpy() for x in outputs]
+        embeds = [x['embeds'].detach().cpu() for x in outputs]
+        points = self.batch2points(embeds)
         targets = [x['target'].cpu().to('cpu') for x in outputs] 
-        preds = [x['pred'].cpu().to('cpu') for x in outputs] 
+        targets = torch.cat(targets, dim=0)
 
-        plot = self.get_embedding_plot(embeds, targets, preds, self.label)
+        plot = self.get_embedding_plot(points, targets, self.annotation)
         self.logger.experiment.add_figure("val embedding", plot)
         return
 
@@ -303,20 +256,25 @@ class CNN_Module(pl.LightningModule):
         loss = F.cross_entropy(y_hat, y)
         pred = y_hat.softmax(dim=-1)
         self.test_accuracy(pred, y)
-      
         return {'loss':loss, 'pred': pred, 'target': y, 'embeds': y_hat, 'z': features}
 
     
     def test_epoch_end(self, outputs):
+
+        embeds = [x['embeds'].detach().cpu() for x in outputs]
+        points = self.batch2points(embeds)
+        targets = [x['target'].cpu().to('cpu') for x in outputs] 
+        targets = torch.cat(targets, dim=0)
+
+        plot = self.get_embedding_plot(points, targets, self.annotation)
        
        # I truly don't know how to deal with this data type. this is the only way??
-        embeds = [x['embeds'].detach().cpu().numpy() for x in outputs]
-        Zs = [x['z']['feats'].detach().cpu().numpy() for x in outputs]
-
-        targets = [x['target'].cpu().to('cpu').numpy() for x in outputs] 
-        preds = [x['pred'].cpu().to('cpu') for x in outputs] 
-    
+        Zs = [x['z']['feats'].detach().cpu() for x in outputs]
         points = self.batch2points(Zs)
+
+        preds = [x['pred'].cpu().to('cpu') for x in outputs] 
+        preds = torch.cat(preds, dim=0)
+    
 
         print("shape of  one sample right before fit:", points[0].shape, len(points), " samples")
         self.gmm = GMM(n_components=2, random_state=0).fit(points)
@@ -326,19 +284,28 @@ class CNN_Module(pl.LightningModule):
             np.save(f, Zs)
 
         print("plotting...")
-        labels = targets
-        plot = self.get_embedding_plot(embeds, labels, preds, self.label)
+        plot = self.get_embedding_plot(points, targets, self.annotation)
         self.logger.experiment.add_figure("test embedding", plot)
 
         print("gmm accuracy...")
         # by hand
         metric = Accuracy()
-        gmm_acc = metric(torch.Tensor(gmm_preds), torch.tensor(targets).squeeze(dim=-1)) 
+        gmm_acc = metric(gmm_preds, targets) 
         self.log('gmm_accuracy', gmm_acc)
+
+        print("GMM fit metrics")
+        print("bic" , self.gmm.bic(points))
+        print("aic", self.gmm.aic(points))
+        sample_plot = self.get_gmm_imprint()
+        print("got imprint")
+        self.logger.experiment.add_figure("gmm sample", sample_plot)
+        print("added imprint")
+        self.log('gmm bic', self.gmm.bic(points), sync_dist=True)
+        print("added bic")
 
         acc = self.test_accuracy.compute()
         print('test_accuracy', acc)
         self.log('test accuracy', acc)
-        
+
         return
 
