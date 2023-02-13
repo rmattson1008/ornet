@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib import mathtext, pyplot as plt
 import os
 
+
 import torch
 from torch.utils.data import Dataset
 
@@ -71,22 +72,21 @@ class TimeChunks(Dataset):
             files = os.listdir(path)
             
             for file_name in files:
-                    if  file_name.split(".")[0] in accept_list:
-                        #read vid, get length, discard vid
-                        path_to_vid = os.path.join(path, file_name)
-                        num_frames = len(np.load(path_to_vid))
+                if  file_name.split(".")[0] in accept_list:
+                    #read vid, get length, discard vid
+                    path_to_vid = os.path.join(path, file_name)
+                    num_frames = len(np.load(path_to_vid))
 
-                        l = range(0,num_frames)
-                        if target == 0:
-                            c_indeces = l[50:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
-                        elif target == 1:
-                            c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
-                        else:
-                            print("FIX UR DATASET")
+                    l = range(0,num_frames)
+                    if target == 0:
+                        c_indeces = l[50:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                    elif target == 1:
+                        c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                    else:
+                        print("FIX UR DATASET")
 
-
-                        chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
-                        samples.extend(chunks)
+                    chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
+                    samples.extend(chunks)
 
 
 

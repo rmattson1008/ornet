@@ -69,13 +69,20 @@ if __name__ == "__main__":
     args.lr = 0.00001
     args.batch_size = 16
     args.shuffle = False
-    args.weight_decay = 0.01
+    args.weight_decay = 0.0
     args.input_dir = '/data/ornet/rachel_baselines'
-    time_steps=1
+    time_steps=5
     step=1
-    path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.01 frames=1 steps=1 lstm-kornia/version_0/checkpoints/epoch=4-step=1460.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 32 lr = 1e-05 wd = 0.1 frames=5 steps=1 cnn-kornia-drop/version_0/checkpoints/epoch=99-step=2900.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 32 lr = 1e-05 wd = 0.01 frames=5 steps=1 cnn-kornia-drop/version_0/checkpoints/epoch=99-step=2900.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-06 wd = 0.01 frames=5 steps=1 lstm-kornia-drop/version_8/checkpoints/epoch=192-step=11194.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 squeeze-test/version_0/checkpoints/epoch=49-step=2900.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 drop-squeeze-test/version_0/checkpoints/epoch=49-step=2900.ckpt'
+    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 cnn-squeeze-test/version_0/checkpoints/epoch=114-step=6670.ckpt'
+    path = '/home/rachel/ornet/tb_logs/ batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 frames=5 steps=1 cnn-squeeze/version_0/checkpoints/epoch=124-step=7250.ckpt'
 
-    model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label='best-Nov2')
+    # model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label='best-Nov10-2')
+    model = CNN_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label='best-Nov28-1')
     logger = TensorBoardLogger("tb_logs", name="test")
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
                 args,frames_per_chunk=time_steps, step=step, resize=224)
@@ -83,5 +90,5 @@ if __name__ == "__main__":
     # trainer.test(model=model, ckpt_path=path, dataloaders=val_dataloader)
     # trainer.test(model=model, dataloaders=test_dataloader)
 
-    trainer = pl.Trainer(accelerator="gpu", devices=1, num_nodes=1)
+    trainer = pl.Trainer(accelerator="gpu", devices=1, num_nodes=1, logger=logger)
     trainer.test(model=model, ckpt_path=path, dataloaders=test_dataloader)

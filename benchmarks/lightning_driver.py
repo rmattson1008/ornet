@@ -147,20 +147,18 @@ if __name__ == "__main__":
         print("test:", len(test_dataloader))
 
         trainer.fit(model, train_dataloader, val_dataloader)
-
-
-        # trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=False)
-        # path = "/home/rachel/ornet/tb_logs/ batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 frames=5 steps=1 cnn-squeeze/version_97/checkpoints/epoch=49-step=2900.ckpt"
-        # model = model.load_from_checkpoint(path)
+        trainer = pl.Trainer(accelerator='gpu',devices=1, num_nodes=1)
         trainer.test(model=model, dataloaders=test_dataloader)
-        # trainer.test(model=model ,dataloaders=test_dataloader)
-
-    
+         
     #   If you want to stop a training run early, you can press “Ctrl + C” on your keyboard. The trainer will catch the KeyboardInterrupt and attempt a graceful shutdown, including running accelerator callback on_train_end to clean up memory. The trainer object will also set an attribute interrupted to True in such cases. If you have a callback which shuts down compute resources, for example, you can conditionally run the shutdown logic for only uninterrupted runs.
         print("leaving code loop")
         # break
 print("leaving program")
 exit()
+
+
+# They reccommend doing trin and test in another script... lmao whats the point pf pytorch lightning
+#write our the path to other file and then have the next script read it
 
 
 
