@@ -1,4 +1,5 @@
 import os
+import json
 from platform import node
 import torch
 from torch import nn
@@ -65,7 +66,7 @@ def get_mean_and_std(dataloader):
     return mean, std
 
 
-def get_dataloaders(args,time_steps=3, frames_per_chunk=3, step =1, resize=224):
+def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
     """
     Access ornet dataset, pass any initial transformations to dataset,
     split into train/test/validate, and return dataloaders
@@ -78,12 +79,12 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, step =1, resize=224):
     # TODO - some sort of normalizing step?
     # transform = transforms.Compose([ transforms.ToTensor(), transforms.Resize(size=224), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     print("creating train dataset")
-    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=step, transform=transform)  
+    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform)  
     print("creating val dataset")
-    val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=step,   transform=transform)  
+    val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=args.step,   transform=transform)  
     
     print("creating test dataset")
-    test_dataset = TimeChunks(args.input_dir, accept_list=X_test, frames_per_chunk=frames_per_chunk, step=step,  transform=transform, verbose=True, shuffle_chunks=False)  
+    test_dataset = TimeChunks(args.input_dir, accept_list=X_test, frames_per_chunk=frames_per_chunk, step=args.step,  transform=transform, verbose=True, shuffle_chunks=False)  
 
     train_dataloader = DataLoader(train_dataset,shuffle=args.shuffle, sampler=None, batch_size=args.batch_size, num_workers=4)
     test_dataloader = DataLoader(test_dataset,shuffle=args.shuffle,sampler=None, batch_size=1, num_workers=4)
@@ -130,30 +131,35 @@ if __name__ == "__main__":
         #TODO I dont think I'm using shuffle... 
         args.weight_decay = wd
 
-        time_steps=time_steps
-        step=1
-        dropout=dropout
+        args.time_steps=time_steps
+        args.step=1
+        args.dropout=dropout
 
-        comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={step} dropout={dropout} cnn-squeeze'
-        # model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label=comment, dropout=False)
-        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= comment,  dropout=dropout)
-        logger = TensorBoardLogger("tb_logs", name=comment)
+        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze'
+        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout)
+        logger = TensorBoardLogger("tb_logs", name=args.comment)
 
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
-        trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=False)
+        trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=True)
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-            args,frames_per_chunk=time_steps, step=step, resize=224)
+            args,frames_per_chunk=time_steps, resize=224)
         print("test:", len(test_dataloader))
-
+    
         trainer.fit(model, train_dataloader, val_dataloader)
-        trainer = pl.Trainer(accelerator='gpu',devices=1, num_nodes=1)
-        trainer.test(model=model, dataloaders=test_dataloader)
-         
-    #   If you want to stop a training run early, you can press “Ctrl + C” on your keyboard. The trainer will catch the KeyboardInterrupt and attempt a graceful shutdown, including running accelerator callback on_train_end to clean up memory. The trainer object will also set an attribute interrupted to True in such cases. If you have a callback which shuts down compute resources, for example, you can conditionally run the shutdown logic for only uninterrupted runs.
+
+        path = "experiments/example.ckpt"
+        trainer.save_checkpoint(path)
+        model_info = {"checkpoint": path, "args":vars(args)}
+        print(model_info)
+        json_object = json.dumps(model_info, indent=4)
+        with open("checkpoint.json", "w") as outfile:
+            outfile.write(json_object)
+
+            
         print("leaving code loop")
         # break
-print("leaving program")
+print("leaving program now")
 exit()
 
 

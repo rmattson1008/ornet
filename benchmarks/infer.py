@@ -1,12 +1,6 @@
-import pickle
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-import torch
-from data_utils import get_accept_list
-# from torchvisions
-import argparse
 import os
+from configargparse import ArgParser
+import json
 from platform import node
 import torch
 from torch import nn
@@ -20,6 +14,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 
+
 import os
 import math
 from turtle import st
@@ -28,67 +23,72 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import transforms
-import torchvision
-from torch.optim import Adam, SGD, AdamW
-from torch.nn import CrossEntropyLoss
-import pickle
 
-from data_utils import FramePairDataset, RoiTransform, get_accept_list, TimeChunks
-from models import BaseCNN, ResNet18, ResBlock, CNN_Encoder
+
+from data_utils import  get_accept_list, TimeChunks
 from lightning_modules import CNN_Module
 from sklearn.metrics import confusion_matrix
 import numpy as np
 from parsing_utils import make_parser
-
-from matplotlib import pyplot as plt
-import pickle
-from tqdm import tqdm
-from time import sleep
-
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-import copy
-import pandas as pd
-import random
-from torch.utils.tensorboard import SummaryWriter
-from itertools import product
-
 from sklearn.model_selection import train_test_split
-from data_utils import FramePairDataset, RoiTransform, get_accept_list, TimeChunks
-from models import BaseCNN, ResNet18, ResBlock, CNN_Encoder
-from lightning_modules import CNN_Module, CnnLSTM_Module
-from sklearn.metrics import confusion_matrix
-import numpy as np
-from parsing_utils import make_parser
-from lightning_driver import get_dataloaders
 
-# i dont want to do this manually!
+# from lightning_driver import get_dataloaders
+
+class Dict2Class(object):
+      
+    def __init__(self, my_dict):
+          
+        for key in my_dict:
+            setattr(self, key, my_dict[key])
+
+
+def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
+    """
+    Access ornet dataset, pass any initial transformations to dataset,
+    split into train/test/validate, and return dataloaders
+    """
+    X, y = get_accept_list("/data/ornet/gmm_intermediates", ['control', 'mdivi', 'llo'])
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
+    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=39)
+
+    transform = transforms.Compose([transforms.ToTensor(),transforms.Resize(size=resize)])
+    # TODO - some sort of normalizing step?
+    # transform = transforms.Compose([ transforms.ToTensor(), transforms.Resize(size=224), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    print("creating train dataset")
+    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform)  
+    print("creating val dataset")
+    val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=args.step,   transform=transform)  
+    
+    print("creating test dataset")
+    test_dataset = TimeChunks(args.input_dir, accept_list=X_test, frames_per_chunk=frames_per_chunk, step=args.step,  transform=transform, verbose=True, shuffle_chunks=False)  
+
+    train_dataloader = DataLoader(train_dataset,shuffle=args.shuffle, sampler=None, batch_size=args.batch_size, num_workers=4)
+    test_dataloader = DataLoader(test_dataset,shuffle=args.shuffle,sampler=None, batch_size=1, num_workers=4)
+    val_dataloader = DataLoader(val_dataset,shuffle=args.shuffle,sampler=None, batch_size=args.batch_size, num_workers=4)
+
+    return train_dataloader, test_dataloader, val_dataloader
+
+
+
 
 if __name__ == "__main__":
-    args = argparse.ArgumentParser()
-    args.lr = 0.00001
-    args.batch_size = 16
-    args.shuffle = False
-    args.weight_decay = 0.0
-    args.input_dir = '/data/ornet/rachel_baselines'
-    time_steps=5
-    step=1
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 32 lr = 1e-05 wd = 0.1 frames=5 steps=1 cnn-kornia-drop/version_0/checkpoints/epoch=99-step=2900.ckpt'
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 32 lr = 1e-05 wd = 0.01 frames=5 steps=1 cnn-kornia-drop/version_0/checkpoints/epoch=99-step=2900.ckpt'
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-06 wd = 0.01 frames=5 steps=1 lstm-kornia-drop/version_8/checkpoints/epoch=192-step=11194.ckpt'
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 squeeze-test/version_0/checkpoints/epoch=49-step=2900.ckpt'
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 drop-squeeze-test/version_0/checkpoints/epoch=49-step=2900.ckpt'
-    # path = '/home/rachel/ornet/tb_logs/ batch_size = 16 lr = 1e-05 wd = 0.0 frames=5 steps=1 cnn-squeeze-test/version_0/checkpoints/epoch=114-step=6670.ckpt'
-    path = '/home/rachel/ornet/tb_logs/ batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 frames=5 steps=1 cnn-squeeze/version_0/checkpoints/epoch=124-step=7250.ckpt'
 
-    # model = CnnLSTM_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label='best-Nov10-2')
-    model = CNN_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label='best-Nov28-1')
-    logger = TensorBoardLogger("tb_logs", name="test")
+    #there must be a better way
+    with open("checkpoint.json", "r") as f:
+        model_card = json.load(f)
+    args = Dict2Class(model_card['args'])
+
+    model = CNN_Module(number_of_frames= args.time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout)
+    model = model.load_from_checkpoint(checkpoint_path=model_card['checkpoint'])
+    logger = TensorBoardLogger("tb_logs", name=args.comment)
+
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-                args,frames_per_chunk=time_steps, step=step, resize=224)
-    # model = CNN_Module(number_of_frames=time_steps, num_classes =2, learning_rate= args.lr, weight_decay=args.weight_decay, label= "e-5")
-    # trainer.test(model=model, ckpt_path=path, dataloaders=val_dataloader)
-    # trainer.test(model=model, dataloaders=test_dataloader)
+                args,frames_per_chunk=args.time_steps, resize=224)
 
-    trainer = pl.Trainer(accelerator="gpu", devices=1, num_nodes=1, logger=logger)
-    trainer.test(model=model, ckpt_path=path, dataloaders=test_dataloader)
+    print("Loaded test hparams")
+
+    trainer = pl.Trainer(accelerator='gpu',devices=1, num_nodes=1, logger=logger)
+    trainer.test(model=model, dataloaders=test_dataloader)
+
+    exit()
+
