@@ -67,7 +67,6 @@ class CNN_Module(pl.LightningModule):
         self.register_buffer("sigma", torch.eye(3))
         self.number_of_frames = number_of_frames
         self.num_classes= num_classes
-        # self.out_height = 32
         self.out_height = 8
         self.train_accuracy = torchmetrics.Accuracy()
         self.val_accuracy = torchmetrics.Accuracy()
@@ -78,6 +77,7 @@ class CNN_Module(pl.LightningModule):
         self.dropout = dropout
         self.show_image = False
         self.gmm = None
+
 
         assert aggregator in ['flatten', 'lstm', 'mean']
         self.aggregator_type = aggregator
@@ -93,18 +93,26 @@ class CNN_Module(pl.LightningModule):
         self.cnn_layers = squeeze
         self.fc = torch.nn.Linear(1000, self.out_height)
 
-        self.flattened_frames_size = self.number_of_frames * 1 * self.out_height
+        self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.out_height, self.num_classes))
+        self.flattened_frames_size = self.number_of_frames * 1 * self.out_height # wait what is 1, when u remember make it a variable. 
 
+        # this could probaby be handled prettier with like a dictionary of functions but I dont care
         if self.aggregator_type == 'flatten':
             self.aggregator = torch.flatten
+            #TODO - now this space is messed up. convolve? 
+            # this should work but is un scientific
+            self.linear_layers = torch.nn.Sequential(torch.nn.Conv1d(1,1,33), torch.nn.Linear(self.out_height, self.num_classes))
+            # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.out_height), torch.nn.Linear(self.out_height, self.num_classes))
         elif self.aggregator_type == 'lstm':
-            self.aggregator = nn.LSTM(self.out_height, self.flattened_frames_size, 1, batch_first=True)
+            self.aggregator = nn.LSTM(self.out_height, self.out_height, 1, batch_first=True)
         elif self.aggregator_type == 'mean':
-            print("Set this up")
-            exit()
+            #TODO - test
+            self.aggregator = torch.mean
+
+         
 
 
-        self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.num_classes))
+        # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.num_classes))
 
         self.hook = self.linear_layers.register_forward_hook(get_features('feats'))
         if self.dropout:
@@ -130,17 +138,23 @@ class CNN_Module(pl.LightningModule):
         for t in range(self.number_of_frames):
             frames[t] = self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
         frames = frames.permute((1,0,2)) # restore batch order
-
+        print(frames.shape)
+        
+        # while the if statements were well intentioned, this is dumb. 
         if self.aggregator_type == 'flatten': 
             aggregated_frames = self.aggregator(frames, start_dim=1)
-            #TODO- how do I do fancy lambdas here.
+            aggregated_frames =  aggregated_frames.unsqueeze(dim=1)
+            print(aggregated_frames.shape)
+            #hmmm ok this will be... 5 * 8
 
         if self.aggregator_type == 'lstm':
             outputs, (hn, cn) = self.aggregator(frames)
             aggregated_frames = hn[-1]
+            # I set the lstm up to output out-height
 
-        # if self.aggregator_type == 'mean':
-        #    aggregated_frames  = self.aggregator(frames)
+        if self.aggregator_type == 'mean':
+           aggregated_frames  = self.aggregator(frames)
+           # now out height
 
         logits = self.linear_layers(aggregated_frames)
         return logits
@@ -223,6 +237,9 @@ class CNN_Module(pl.LightningModule):
         return outputs
 
     def training_epoch_end(self, outputs):
+        #debugging too many open figs
+        open_figs = plt.get_fignums()
+        print("number of open figures:", len(open_figs))
         return
 
     def validation_step(self, batch, batch_idx):
@@ -247,6 +264,7 @@ class CNN_Module(pl.LightningModule):
 
         plot = self.get_embedding_plot(points, targets, self.annotation)
         self.logger.experiment.add_figure("val embedding", plot)
+        plt.close(fig=plot)
         return
 
     def test_step(self, batch, batch_idx):
@@ -286,6 +304,7 @@ class CNN_Module(pl.LightningModule):
         print("plotting...")
         plot = self.get_embedding_plot(points, targets, self.annotation)
         self.logger.experiment.add_figure("test embedding", plot)
+        plt.close(fig=plot)
 
         print("gmm accuracy...")
         # by hand
@@ -299,6 +318,7 @@ class CNN_Module(pl.LightningModule):
         sample_plot = self.get_gmm_imprint()
         print("got imprint")
         self.logger.experiment.add_figure("gmm sample", sample_plot)
+        plt.close(fig=sample_plot)
         print("added imprint")
         self.log('gmm bic', self.gmm.bic(points), sync_dist=True)
         print("added bic")
