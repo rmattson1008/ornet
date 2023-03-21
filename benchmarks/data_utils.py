@@ -21,7 +21,7 @@ where H and W are expected to be at least 224. The images have to be loaded
 in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
 """
 class TimeChunks(Dataset):
-    def __init__(self, path_to_folder, accept_list, frames_per_chunk=2 , step=1, class_types=['control', 'mdivi', 'llo'], transform=None, verbose=False, shuffle_chunks=True, random_wildtype=False):
+    def __init__(self, path_to_folder, accept_list, frames_per_chunk=2 , step=1, class_types=['control', 'mdivi', 'llo'], transform=None, verbose=False, shuffle_chunks=True, random_wildtype_p=None):
         """
         Initializes dataset. For now samples all frames possible that is can. could be more selective (undersample "overrepresented")
 
@@ -34,6 +34,7 @@ class TimeChunks(Dataset):
 
 
         """
+        print("p", random_wildtype_p)
         random.seed(69)
 
         # landing place for X,y
@@ -56,16 +57,14 @@ class TimeChunks(Dataset):
 
         samples = []
         for label in self.class_types:
-        
+            print(label)
+        # TODO this is wrong
             if label == "llo":
                 target = 0
             elif label == "mdivi":
                 target = 1
             elif label == "control":
-                if random_wildtype:
-                    target = 2
-                else:
-                    continue
+                target = 2
             else:
                 print("that didn't work. are you using the right data?")
 
@@ -86,11 +85,41 @@ class TimeChunks(Dataset):
                     elif target == 1:
                         c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
                     elif target == 2:
-                        c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
-                        # reset label to random class
-                        choose = [0,1]
-                        target = random.choice(choose)
-                    else:
+
+                        # add control with random label to dataset with prob p
+                        
+                        # if random_wildtype_p:
+                        #     r = random.random()
+                        #     print("random:", r)
+                        #     assert r >=0
+                        #     assert r <=1
+                        #     if r < random_wildtype_p:
+                        #         # add control sample to binary dataset
+                        #         c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                        #         choose = [0,1]
+                        #         target = random.choice(choose) # with random label
+                        #     else: # if random r not less than p
+                        #         # don't add control sample. 
+                        #         continue
+                        # else: # if not p
+                        #         # don't add control sample. 
+                        #         continue # I'm so sorry dear reader   
+
+
+
+                        # It would be better to take this whole section and instead write, if p, sample # frame pairs from the control video
+                        #untested
+                        if random_wildtype_p:
+                            c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
+                            number_to_take =  round(random_wildtype_p * len(c_indeces))
+                            # print("sampling", number_to_take, "elements from each control video")
+                            c_indeces = random.sample(c_indeces, number_to_take)
+                            choose = [0,1]
+                            target = random.choice(choose) # with random label
+                        else:
+                            continue
+
+                    else: #no associated target
                         print("SOMETHING WENT WRONG")
                     
                     chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
@@ -112,7 +141,7 @@ class TimeChunks(Dataset):
 
     
     def __getitem__(self, idx):
-        one_hot = {0:torch.Tensor([1,0]), 1:torch.Tensor([0,1])} #two brain cells
+        one_hot = {0:torch.tensor([1,0], dtype=torch.float), 1:torch.tensor([0,1],  dtype=torch.float)} #two brain cells
         
         try:
             path, start_idx = self.samples[idx]
