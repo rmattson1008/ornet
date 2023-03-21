@@ -38,8 +38,6 @@ import pickle
 from tqdm import tqdm
 from time import sleep
 
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 import random
 from torch.utils.tensorboard import SummaryWriter
 from itertools import product
@@ -86,9 +84,9 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
     print("creating test dataset")
     test_dataset = TimeChunks(args.input_dir, accept_list=X_test, frames_per_chunk=frames_per_chunk, step=args.step,  transform=transform, verbose=True, shuffle_chunks=False)  
 
-    train_dataloader = DataLoader(train_dataset,shuffle=args.shuffle, sampler=None, batch_size=args.batch_size, num_workers=4)
-    test_dataloader = DataLoader(test_dataset,shuffle=args.shuffle,sampler=None, batch_size=1, num_workers=4)
-    val_dataloader = DataLoader(val_dataset,shuffle=args.shuffle,sampler=None, batch_size=args.batch_size, num_workers=4)
+    train_dataloader = DataLoader(train_dataset,shuffle=args.shuffle, sampler=None, batch_size=args.batch_size, num_workers=4, drop_last=True) # WHY CANT I HANDLE UNEVEN BATCHES
+    test_dataloader = DataLoader(test_dataset,shuffle=args.shuffle,sampler=None, batch_size=1, num_workers=4,)
+    val_dataloader = DataLoader(val_dataset,shuffle=args.shuffle,sampler=None, batch_size=1, num_workers=4)
 
     return train_dataloader, test_dataloader, val_dataloader
 
@@ -140,7 +138,9 @@ if __name__ == "__main__":
         logger = TensorBoardLogger("tb_logs", name=args.comment)
 
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
-        trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=True)
+        print("Attempting to build trainer")
+        # trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=True)
+        trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True)
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
             args,frames_per_chunk=time_steps, resize=224)
