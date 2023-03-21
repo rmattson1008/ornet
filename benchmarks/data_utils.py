@@ -92,7 +92,7 @@ class TimeChunks(Dataset):
                         target = random.choice(choose)
                     else:
                         print("SOMETHING WENT WRONG")
-
+                    
                     chunks = [(target, path_to_vid, start_idx) for start_idx in c_indeces]
                     samples.extend(chunks)
 
@@ -112,6 +112,7 @@ class TimeChunks(Dataset):
 
     
     def __getitem__(self, idx):
+        one_hot = {0:torch.Tensor([1,0]), 1:torch.Tensor([0,1])} #two brain cells
         
         try:
             path, start_idx = self.samples[idx]
@@ -126,6 +127,9 @@ class TimeChunks(Dataset):
             target = {'label':self.targets[idx],'vid_path': path, 'range':(start_idx, end_index), 'step': self.step_size }
         else:
             target = self.targets[idx]
+            # print("target:",target)
+            target=one_hot[target]
+            # print("target:", target)
 
  
         frames = np.load(path)       
@@ -143,7 +147,8 @@ class TimeChunks(Dataset):
 
 
 def get_accept_list(path_to_intermediates, classes) -> list:
-    path_to_intermediates = "/data/ornet/gmm_intermediates"
+    #TODO - this should become an arguement
+    path_to_intermediates = "/mnt/data4TBa/ram13275/gmm_intermediates" 
     accept_list = []
     class_vector = []
     for subdir in classes:
