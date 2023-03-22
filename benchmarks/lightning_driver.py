@@ -133,9 +133,9 @@ if __name__ == "__main__":
         args.step=1
         args.dropout=dropout
 
-        args.agg = "flatten"
+        args.agg = "mean"
 
-        path = "experiments/example.ckpt"
+        path = "experiments/example.pth"
         args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
         model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
         logger = TensorBoardLogger("tb_logs", name=args.comment)
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
         print("Attempting to build trainer")
         # trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=True)
-        trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True,    default_root_dir=path)
+        trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True) # idk how to do checkpointing the pl way...
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
             args,frames_per_chunk=time_steps, resize=224)
@@ -157,6 +157,10 @@ if __name__ == "__main__":
      
         # trainer.save_checkpoint(path, weights_only=True) # maybe this isnt right? hmm... 
         model_info = {"checkpoint": path, "args":vars(args)}
+        torch.save({'epoch': args.epochs,
+        'model_state_dict': model.state_dict()}, 
+	         path)
+
         print(model_info)
         json_object = json.dumps(model_info, indent=4)
         with open("checkpoint.json", "w") as outfile:
@@ -165,7 +169,7 @@ if __name__ == "__main__":
             
         print("leaving code loop")
         # break
-    print("leaving program now, ok?")
+    print("leaving training  program now")
     exit()
 
 

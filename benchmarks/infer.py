@@ -49,6 +49,7 @@ if __name__ == "__main__":
     args = Dict2Class(model_card['args'])
 
     print(args.agg)
+    print()
 
     model = CNN_Module(number_of_frames= args.time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
     print(model)
@@ -59,11 +60,13 @@ if __name__ == "__main__":
     # linear layers of the agg have trouble getting the weight and bias to transfer.
     # maybe they are not corrrectly added to the pl module?
     checkpoint= torch.load(model_card['checkpoint'])
-    model.load_state_dict(checkpoint["state_dict"])
+    print("loaded checkpoint")
+    # print(checkpoint)
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
     # model = model.load_from_checkpoint(checkpoint_path=model_card['checkpoint'])
-    print(model)
+    # print(model)
     logger = TensorBoardLogger("tb_logs", name=args.comment)
 
     train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
@@ -77,4 +80,10 @@ if __name__ == "__main__":
     trainer.test(model=model, dataloaders=test_dataloader)
 
     exit()
+
+    # TODO - debug gmm
+    # TODO - increase final embedding size? 
+    # TODO - pick better dim reduciton that gmm will find two components... 
+    # TODO - set up fine saving nicely. more dicts?
+
 
