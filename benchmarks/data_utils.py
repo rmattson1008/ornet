@@ -85,30 +85,8 @@ class TimeChunks(Dataset):
                     elif target == 1:
                         c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
                     elif target == 2:
-
                         # add control with random label to dataset with prob p
-                        
-                        # if random_wildtype_p:
-                        #     r = random.random()
-                        #     print("random:", r)
-                        #     assert r >=0
-                        #     assert r <=1
-                        #     if r < random_wildtype_p:
-                        #         # add control sample to binary dataset
-                        #         c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
-                        #         choose = [0,1]
-                        #         target = random.choice(choose) # with random label
-                        #     else: # if random r not less than p
-                        #         # don't add control sample. 
-                        #         continue
-                        # else: # if not p
-                        #         # don't add control sample. 
-                        #         continue # I'm so sorry dear reader   
-
-
-
-                        # It would be better to take this whole section and instead write, if p, sample # frame pairs from the control video
-                        #untested
+                        # this is not like label flipping because the label is set for the duration of training. At some point, the model will start overfitting and memorize which category each control sample belongs to.
                         if random_wildtype_p:
                             c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
                             number_to_take =  round(random_wildtype_p * len(c_indeces))
@@ -152,8 +130,9 @@ class TimeChunks(Dataset):
             path, start_idx = self.samples[idx]
         end_index = start_idx + self.frames_per_chunk * self.step_size 
         
+        # maybe clean up these if elses?
         if self.verbose:
-            target = {'label':self.targets[idx],'vid_path': path, 'range':(start_idx, end_index), 'step': self.step_size }
+            target = {'label':one_hot[self.targets[idx]],'vid_path': path, 'range':(start_idx, end_index), 'step': self.step_size }
         else:
             target = self.targets[idx]
             # print("target:",target)
