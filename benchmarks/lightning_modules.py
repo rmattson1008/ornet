@@ -68,10 +68,10 @@ class CNN_Module(pl.LightningModule):
         self.number_of_frames = number_of_frames
         self.num_classes= num_classes
         self.out_height = 8
-        self.train_accuracy = torchmetrics.Accuracy()
-        self.val_accuracy = torchmetrics.Accuracy()
-        self.test_accuracy = torchmetrics.Accuracy()
-        self.gmm_accuracy = torchmetrics.Accuracy()
+        self.train_accuracy = torchmetrics.Accuracy(task='binary')
+        self.val_accuracy = torchmetrics.Accuracy(task='binary')
+        self.test_accuracy = torchmetrics.Accuracy(task='binary')
+        self.gmm_accuracy = torchmetrics.Accuracy(task='binary')
         self.annotation = label
         self.transform = DataAugmentation()
         self.dropout = dropout
@@ -124,11 +124,16 @@ class CNN_Module(pl.LightningModule):
 
     def forward(self, x):
         #is this all on the comp. graph
+        # print("1")
         frames = torch.empty((x.size(1), x.size(0), self.out_height)).type_as(x)
 
+        # print("2")
+        # print(x.dtype)
         x = x.unsqueeze(dim=1)
         x = self.transform(x)
         x = x.squeeze(dim=1)
+        # print("3")
+        # print(x.dtype)
 
         if self.show_image:
             image_to_print = x[0][0].clone().detach().unsqueeze(dim=0)
@@ -138,13 +143,14 @@ class CNN_Module(pl.LightningModule):
         for t in range(self.number_of_frames):
             frames[t] = self.fc(self.cnn_layers(x[:, t, :, :].unsqueeze(1)))
         frames = frames.permute((1,0,2)) # restore batch order
-        print(frames.shape)
+        # print("4")
+        # print(frames.shape)
         
         # while the if statements were well intentioned, this is dumb. 
         if self.aggregator_type == 'flatten': 
             aggregated_frames = self.aggregator(frames, start_dim=1)
             aggregated_frames =  aggregated_frames.unsqueeze(dim=1)
-            print(aggregated_frames.shape)
+            
             #hmmm ok this will be... 5 * 8
 
         if self.aggregator_type == 'lstm':
@@ -153,10 +159,15 @@ class CNN_Module(pl.LightningModule):
             # I set the lstm up to output out-height
 
         if self.aggregator_type == 'mean':
-           aggregated_frames  = self.aggregator(frames)
+           aggregated_frames  = self.aggregator(frames, dim=1)
            # now out height
-
+        # print("Aggregating")
+        # print(aggregated_frames.shape)
+        # print("Final dense")
         logits = self.linear_layers(aggregated_frames)
+        logits = logits.squeeze(dim=1)
+        # print("logits shape:", logits.shape)
+        # print(logits)
         return logits
 
     def configure_optimizers(self):
@@ -180,7 +191,7 @@ class CNN_Module(pl.LightningModule):
         np.random.seed(42)
         fig = plt.figure()
         ax = fig.add_subplot()
-        ax.scatter(xs, ys, c=labels.tolist(), cmap=matplotlib.colors.ListedColormap(colors))
+        ax.scatter(xs, ys, c=labels.argmax(dim=1).tolist(), cmap=matplotlib.colors.ListedColormap(colors))
     
         plt.title(name)
         ax.set_xlabel('X Label')
@@ -204,11 +215,16 @@ class CNN_Module(pl.LightningModule):
         return membership_probs
 
     def get_gmm_preds(self, points:torch.Tensor) -> torch.Tensor:
+        """ 
+        returns gmm preds in a one hot encoded tensor
+        """
         print("entering get gmm preds")
         points = np.asanyarray(points)
         membership_probs = self.gmm.predict_proba(points)
         preds = membership_probs.argmax(axis=1)
-        return torch.tensor(preds)
+        preds = torch.tensor(preds)
+        preds = torch.nn.functional.one_hot(preds, num_classes=2)
+        return preds
 
     def get_gmm_imprint(self, n=100):   
         """ Given a fitted gmm, get a sample of the distribution"""
@@ -236,7 +252,7 @@ class CNN_Module(pl.LightningModule):
         self.log('train_loss', outputs['loss'], sync_dist=True)
         return outputs
 
-    def training_epoch_end(self, outputs):
+    def train_epoch_end(self, outputs):
         #debugging too many open figs
         open_figs = plt.get_fignums()
         print("number of open figures:", len(open_figs))
@@ -262,6 +278,7 @@ class CNN_Module(pl.LightningModule):
         targets = [x['target'].cpu().to('cpu') for x in outputs] 
         targets = torch.cat(targets, dim=0)
 
+        # TODO - reinstate
         plot = self.get_embedding_plot(points, targets, self.annotation)
         self.logger.experiment.add_figure("val embedding", plot)
         plt.close(fig=plot)
@@ -308,7 +325,7 @@ class CNN_Module(pl.LightningModule):
 
         print("gmm accuracy...")
         # by hand
-        metric = Accuracy()
+        metric = torchmetrics.Accuracy(task="binary")
         gmm_acc = metric(gmm_preds, targets) 
         self.log('gmm_accuracy', gmm_acc)
 
