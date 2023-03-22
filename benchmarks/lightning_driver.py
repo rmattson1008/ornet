@@ -73,11 +73,11 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
     X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=39)
 
-    transform = transforms.Compose([transforms.ToTensor(),transforms.Resize(size=resize)])
+    transform = transforms.Compose([transforms.ToTensor(),transforms.Resize(size=resize, antialias=True)])
     # TODO - some sort of normalizing step?
     # transform = transforms.Compose([ transforms.ToTensor(), transforms.Resize(size=224), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     print("creating train dataset")
-    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform)  
+    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform, random_wildtype_p=.3)  
     print("creating val dataset")
     val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=args.step,   transform=transform)  
     
@@ -133,8 +133,10 @@ if __name__ == "__main__":
         args.step=1
         args.dropout=dropout
 
-        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze'
-        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator='flatten')
+        args.agg = "flatten"
+
+        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
+        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
         logger = TensorBoardLogger("tb_logs", name=args.comment)
 
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
@@ -149,7 +151,7 @@ if __name__ == "__main__":
         trainer.fit(model, train_dataloader, val_dataloader)
 
         path = "experiments/example.ckpt"
-        trainer.save_checkpoint(path)
+        trainer.save_checkpoint(path) # maybe this isnt right?
         model_info = {"checkpoint": path, "args":vars(args)}
         print(model_info)
         json_object = json.dumps(model_info, indent=4)
@@ -159,8 +161,8 @@ if __name__ == "__main__":
             
         print("leaving code loop")
         # break
-print("leaving program now")
-exit()
+    print("leaving program now, ok?")
+    exit()
 
 
 # They reccommend doing trin and test in another script... lmao whats the point pf pytorch lightning
