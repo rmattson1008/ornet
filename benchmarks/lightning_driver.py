@@ -135,6 +135,7 @@ if __name__ == "__main__":
 
         args.agg = "flatten"
 
+        path = "experiments/example.ckpt"
         args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
         model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
         logger = TensorBoardLogger("tb_logs", name=args.comment)
@@ -142,7 +143,7 @@ if __name__ == "__main__":
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
         print("Attempting to build trainer")
         # trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True, enable_checkpointing=True)
-        trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True)
+        trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True,    default_root_dir=path)
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
             args,frames_per_chunk=time_steps, resize=224)
@@ -150,8 +151,11 @@ if __name__ == "__main__":
     
         trainer.fit(model, train_dataloader, val_dataloader)
 
-        path = "experiments/example.ckpt"
-        trainer.save_checkpoint(path) # maybe this isnt right?
+        print(model)
+        print(model.state_dict().keys())
+
+     
+        # trainer.save_checkpoint(path, weights_only=True) # maybe this isnt right? hmm... 
         model_info = {"checkpoint": path, "args":vars(args)}
         print(model_info)
         json_object = json.dumps(model_info, indent=4)
@@ -165,8 +169,8 @@ if __name__ == "__main__":
     exit()
 
 
-# They reccommend doing trin and test in another script... lmao whats the point pf pytorch lightning
-#write our the path to other file and then have the next script read it
+# They reccommend doing train and test in another script... lmao whats the point pf pytorch lightning
+# write our the path to other file and then have the next script read it
 
 
 
