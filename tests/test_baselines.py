@@ -9,8 +9,8 @@ from torchvision import transforms
 # probably missing some concept but this works if you are working in your /ornet dir
 curr_dir = os.getcwd()
 sys.path.insert(0, curr_dir)
-from benchmarks.data_utils import RoiTransform, FramePairDataset
-from benchmarks.models import BaseCNN
+from ram_thesis_src.data_utils import RoiTransform, FramePairDataset
+from ram_thesis_src.models import BaseCNN
 
 data_path = '/data/ornet/single_cells_cnns/'
 class_types = ['control', 'mdivi', 'llo']
