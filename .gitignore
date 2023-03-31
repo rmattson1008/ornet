@@ -29,6 +29,6 @@ keep_ckpt/*
 
 
 # ram local dirs
-ram_thesis_experiments/*
+*experiments/*
 ram_notebooks/*
 benchmark_models/*
