@@ -97,16 +97,16 @@ class CNN_Module(pl.LightningModule):
         self.flattened_frames_size = self.number_of_frames * 1 * self.out_height # wait what is 1, when u remember make it a variable. 
 
         # this could probaby be handled prettier with like a dictionary of functions but I dont care
+        # something is telling me I should have everything defined in init.
         if self.aggregator_type == 'flatten':
             self.aggregator = torch.flatten
-            #TODO - now this space is messed up. convolve? 
-            # this should work but is un scientific
-            self.linear_layers = torch.nn.Sequential(torch.nn.Conv1d(1,1,33), torch.nn.Linear(self.out_height, self.num_classes))
-            # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.out_height), torch.nn.Linear(self.out_height, self.num_classes))
+            # this should compile but is unscientific
+            # self.linear_layers = torch.nn.Sequential(torch.nn.Conv1d(1,1,33), torch.nn.Linear(self.out_height, self.num_classes)) # self-sabotage?
+            self.linear_layers = torch.nn.Sequential(OrderedDict([('conv1',torch.nn.Conv1d(1,1,33)), ('dense1', torch.nn.Linear(self.out_height, self.num_classes))])) # self-sabotage?
+            # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.out_height), torch.nn.Linear(self.out_height, self.num_classes)) # cheating?
         elif self.aggregator_type == 'lstm':
             self.aggregator = nn.LSTM(self.out_height, self.out_height, 1, batch_first=True)
         elif self.aggregator_type == 'mean':
-            #TODO - test
             self.aggregator = torch.mean
 
          
@@ -151,8 +151,6 @@ class CNN_Module(pl.LightningModule):
             aggregated_frames = self.aggregator(frames, start_dim=1)
             aggregated_frames =  aggregated_frames.unsqueeze(dim=1)
             
-            #hmmm ok this will be... 5 * 8
-
         if self.aggregator_type == 'lstm':
             outputs, (hn, cn) = self.aggregator(frames)
             aggregated_frames = hn[-1]
@@ -219,7 +217,7 @@ class CNN_Module(pl.LightningModule):
         returns gmm preds in a one hot encoded tensor
         """
         print("entering get gmm preds")
-        points = np.asanyarray(points)
+        points = np.asanyarray(points, dtype=tuple)
         membership_probs = self.gmm.predict_proba(points)
         preds = membership_probs.argmax(axis=1)
         preds = torch.tensor(preds)
@@ -312,8 +310,14 @@ class CNN_Module(pl.LightningModule):
     
 
         print("shape of  one sample right before fit:", points[0].shape, len(points), " samples")
+        # if len points.shape() == 3
+        print(points.shape)
+        points = points.squeeze(dim=1)
+        print("last", points.shape)
         self.gmm = GMM(n_components=2, random_state=0).fit(points)
+        print("fitted")
         gmm_preds = self.get_gmm_preds(points) # jesus 
+        # here
      
         with open('features_out.npy', 'wb') as f:
             np.save(f, Zs)
