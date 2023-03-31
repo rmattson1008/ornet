@@ -26,3 +26,9 @@ epoch*
 
 *.json
 keep_ckpt/*
+
+
+# ram local dirs
+ram_thesis_experiments/*
+ram_notebooks/*
+benchmark_models/*
