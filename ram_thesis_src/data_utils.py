@@ -83,6 +83,7 @@ class TimeChunks(Dataset):
                     if target == 0:
                         c_indeces = l[50:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
                     elif target == 1:
+                        
                         c_indeces = l[0:-self.frames_per_chunk * self.step_size:self.frames_per_chunk * self.step_size]
                     elif target == 2:
                         # add control with random label to dataset with prob p
@@ -156,7 +157,8 @@ class TimeChunks(Dataset):
 
 def get_accept_list(path_to_intermediates, classes) -> list:
     #TODO - this should become an arguement
-    path_to_intermediates = "/mnt/data4TBa/ram13275/gmm_intermediates" 
+    # path_to_intermediates = "/mnt/data4TBa/ram13275/gmm_intermediates" 
+    path_to_intermediates = "/data/ornet/gmm_intermediates" 
     accept_list = []
     class_vector = []
     for subdir in classes:

@@ -64,7 +64,7 @@ def get_mean_and_std(dataloader):
     return mean, std
 
 
-def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
+def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224, wildtype_p=0):
     """
     Access ornet dataset, pass any initial transformations to dataset,
     split into train/test/validate, and return dataloaders
@@ -77,7 +77,7 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224):
     # TODO - some sort of normalizing step?
     # transform = transforms.Compose([ transforms.ToTensor(), transforms.Resize(size=224), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     print("creating train dataset")
-    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform, random_wildtype_p=.3)  
+    train_dataset = TimeChunks(args.input_dir, accept_list=X_train, frames_per_chunk=frames_per_chunk, step=args.step, transform=transform, random_wildtype_p=wildtype_p)  
     print("creating val dataset")
     val_dataset = TimeChunks(args.input_dir, accept_list=X_val, frames_per_chunk=frames_per_chunk,step=args.step,   transform=transform)  
     
@@ -114,15 +114,17 @@ if __name__ == "__main__":
         lr=[0.00001],
         batch_size=[16],
         time_steps=[5],
-        wd =  [0.0],
-        dropout = [True],
-        shuffle=[False]
+        wd =  [0.0, 0.01],
+        dropout = [True, False],
+        shuffle=[True, False],
+        agg = ['mean', 'lstm', 'flatten'],
+        wildtype_p = [0,.5]
     )
 
     # idk what im doing!!!
     param_values = [v for v in hyper_parameters.values()]
 
-    for lr, batch_size, time_steps, wd, dropout, shuffle in product(*param_values):
+    for lr, batch_size, time_steps, wd, dropout, shuffle, agg, wildtype_p in product(*param_values):
         args.lr = lr
         args.batch_size = batch_size
         args.shuffle = shuffle
@@ -133,10 +135,11 @@ if __name__ == "__main__":
         args.step=1
         args.dropout=dropout
 
-        args.agg = "mean"
+        args.agg = agg
+        args.wildtype_p = wildtype_p
 
-        path = "experiments/example.pth"
-        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
+        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} wp= {args.wildtype_p} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
+        path = "ram_thesis_experiments/" + args.comment + ".pth"
         model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
         logger = TensorBoardLogger("tb_logs", name=args.comment)
 
@@ -146,7 +149,7 @@ if __name__ == "__main__":
         trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, deterministic=True, enable_checkpointing=True) # idk how to do checkpointing the pl way...
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True)
         train_dataloader, test_dataloader, val_dataloader = get_dataloaders(
-            args,frames_per_chunk=time_steps, resize=224)
+            args,frames_per_chunk=time_steps, resize=224, wildtype_p=args.wildtype_p)
         print("test:", len(test_dataloader))
     
         trainer.fit(model, train_dataloader, val_dataloader)
@@ -154,7 +157,6 @@ if __name__ == "__main__":
         print(model)
         print(model.state_dict().keys())
 
-     
         # trainer.save_checkpoint(path, weights_only=True) # maybe this isnt right? hmm... 
         model_info = {"checkpoint": path, "args":vars(args)}
         torch.save({'epoch': args.epochs,
@@ -163,7 +165,7 @@ if __name__ == "__main__":
 
         print(model_info)
         json_object = json.dumps(model_info, indent=4)
-        with open("checkpoint.json", "w") as outfile:
+        with open("checkpoint" + args.comment + ".json", "w") as outfile:
             outfile.write(json_object)
 
             

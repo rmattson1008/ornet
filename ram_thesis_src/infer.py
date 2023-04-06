@@ -44,6 +44,8 @@ if __name__ == "__main__":
 
     print("inference")
     #there must be a better way
+    # why am I doing it like this. 
+
     with open("checkpoint.json", "r") as f:
         model_card = json.load(f)
     args = Dict2Class(model_card['args'])
