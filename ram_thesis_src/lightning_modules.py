@@ -1,5 +1,4 @@
 
-from pickletools import string1
 from typing import OrderedDict
 import torch
 from collections import OrderedDict 
@@ -30,12 +29,7 @@ from torchmetrics.classification import Accuracy
 
 features = {}
 
-def get_features(name):
-    def hook(model, input, output):    
-        batch = input[0].detach()
-        features[name] = batch
-        # print("batch hook", batch.shape)
-    return hook
+
 
 class DataAugmentation(nn.Module):
     """Module to perform data augmentation using Kornia on torch tensors."""
@@ -62,12 +56,13 @@ class DataAugmentation(nn.Module):
         return x_out
 
 class CNN_Module(pl.LightningModule):
-    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False, aggregator='lstm'):
+    def __init__(self, number_of_frames=5, num_classes=2, learning_rate=0.00001, weight_decay=0, label="model", dropout=False, aggregator='lstm', lstm_dropout=0):
         super().__init__()
         self.register_buffer("sigma", torch.eye(3))
         self.number_of_frames = number_of_frames
         self.num_classes= num_classes
-        self.out_height = 8
+        self.out_height = 16
+        self.rep_out = OrderedDict()
         self.train_accuracy = torchmetrics.Accuracy(task='binary')
         self.val_accuracy = torchmetrics.Accuracy(task='binary')
         self.test_accuracy = torchmetrics.Accuracy(task='binary')
@@ -77,6 +72,7 @@ class CNN_Module(pl.LightningModule):
         self.dropout = dropout
         self.show_image = False
         self.gmm = None
+        self.label = label
 
 
         assert aggregator in ['flatten', 'lstm', 'mean']
@@ -93,7 +89,6 @@ class CNN_Module(pl.LightningModule):
         self.cnn_layers = squeeze
         self.fc = torch.nn.Linear(1000, self.out_height)
 
-        self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.out_height, self.num_classes))
         self.flattened_frames_size = self.number_of_frames * 1 * self.out_height # wait what is 1, when u remember make it a variable. 
 
         # this could probaby be handled prettier with like a dictionary of functions but I dont care
@@ -102,10 +97,15 @@ class CNN_Module(pl.LightningModule):
             self.aggregator = torch.flatten
             # this should compile but is unscientific
             # self.linear_layers = torch.nn.Sequential(torch.nn.Conv1d(1,1,33), torch.nn.Linear(self.out_height, self.num_classes)) # self-sabotage?
-            self.linear_layers = torch.nn.Sequential(OrderedDict([('conv1',torch.nn.Conv1d(1,1,33)), ('dense1', torch.nn.Linear(self.out_height, self.num_classes))])) # self-sabotage?
+            # self.linear_layers = torch.nn.Sequential(OrderedDict([('conv1',torch.nn.Conv1d(1,1,33)), ('dense1', torch.nn.Linear(self.out_height, self.num_classes))])) # self-sabotage?
+            self.linear_layers = torch.nn.Sequential(OrderedDict([('dense1',torch.nn.Linear(self.flattened_frames_size , self.out_height)), ('dense2', torch.nn.Linear(self.out_height, self.num_classes))])) # self-sabotage?
             # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.out_height), torch.nn.Linear(self.out_height, self.num_classes)) # cheating?
         elif self.aggregator_type == 'lstm':
-            self.aggregator = nn.LSTM(self.out_height, self.out_height, 1, batch_first=True)
+            # if self.dropout:
+            self.aggregator = nn.LSTM(self.out_height, self.out_height, 1, dropout=lstm_dropout, batch_first=True)
+            # else:
+                # self.aggregator = nn.LSTM(self.out_height, self.out_height, 1, batch_first=True)
+
         elif self.aggregator_type == 'mean':
             self.aggregator = torch.mean
 
@@ -114,13 +114,28 @@ class CNN_Module(pl.LightningModule):
 
         # self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.flattened_frames_size, self.num_classes))
 
-        self.hook = self.linear_layers.register_forward_hook(get_features('feats'))
+        self.linear_layers = torch.nn.Sequential(torch.nn.Linear(self.out_height, self.num_classes))
+        # self.hook = self.linear_layers.register_forward_hook(get_features(f'feats-{self.out_height}'))
+        self.hook = self.linear_layers.register_forward_hook(self.get_features(f'feats'))
+
         if self.dropout:
             print('Using dropout')
             self.cnn_layers.classifier.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
             self.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
             self.linear_layers[0].register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.25, training=m.training))
- 
+
+    # def forward_hook(self, layer_name):
+    #     def hook(module, inp, output):
+    #         self.rep_out[layer_name] = inp
+    #     return hook
+
+
+    def get_features(self, name):
+        def hook(model, input, output):    
+            batch = input[0].detach()
+            self.rep_out[name] = batch
+        # print("batch hook", batch.shape)
+        return hook
 
     def forward(self, x):
         #is this all on the comp. graph
@@ -129,6 +144,7 @@ class CNN_Module(pl.LightningModule):
 
         # print("2")
         # print(x.dtype)
+
         x = x.unsqueeze(dim=1)
         x = self.transform(x)
         x = x.squeeze(dim=1)
@@ -242,7 +258,7 @@ class CNN_Module(pl.LightningModule):
         outputs = self(inputs)
         preds = outputs.softmax(dim=-1)
         loss = F.cross_entropy(outputs, labels)
-        return {'loss': loss, 'pred': preds, 'target': labels, 'embeds': outputs, 'z': features['feats']}
+        return {'loss': loss, 'pred': preds, 'target': labels, 'embeds': outputs, 'z': self.rep_out['feats']}
 
     def training_step_end(self, outputs):
         self.train_accuracy(outputs['pred'], outputs['target'])
@@ -286,13 +302,25 @@ class CNN_Module(pl.LightningModule):
         x, verbose_y = batch
         y = verbose_y['label']
         y_hat = self(x)
+        # loss = None
+        # pred= None
         loss = F.cross_entropy(y_hat, y)
         pred = y_hat.softmax(dim=-1)
         self.test_accuracy(pred, y)
-        return {'loss':loss, 'pred': pred, 'target': y, 'embeds': y_hat, 'z': features}
+
+        # print("Z from batch",  self.rep_out)
+        return {'loss':loss, 'pred': pred, 'target': y, 'verbose':verbose_y, 'embeds': y_hat, 'z': self.rep_out['feats']}
 
     
     def test_epoch_end(self, outputs):
+
+        # # Janky way to get control embeds off this
+        # Zs = [x['z'].detach().cpu() for x in outputs]
+        # verbose = [x['verbose'] for x in outputs]
+
+        # with open(f'features_out CONTROL {self.label}.npy', 'wb') as f:
+        #     pickle.dump((verbose, Zs), f)
+        # exit()
 
         embeds = [x['embeds'].detach().cpu() for x in outputs]
         points = self.batch2points(embeds)
@@ -302,7 +330,8 @@ class CNN_Module(pl.LightningModule):
         plot = self.get_embedding_plot(points, targets, self.annotation)
        
        # I truly don't know how to deal with this data type. this is the only way??
-        Zs = [x['z']['feats'].detach().cpu() for x in outputs]
+        Zs = [x['z'].detach().cpu() for x in outputs]
+        verbose = [x['verbose'] for x in outputs]
         points = self.batch2points(Zs)
 
         preds = [x['pred'].cpu().to('cpu') for x in outputs] 
@@ -318,9 +347,12 @@ class CNN_Module(pl.LightningModule):
         print("fitted")
         gmm_preds = self.get_gmm_preds(points) # jesus 
         # here
+
+        print(type(self.rep_out))
+        
      
-        with open('features_out.npy', 'wb') as f:
-            np.save(f, Zs)
+        with open(f'/home/rachel/ornet/Zs/features_out{self.label}.npy', 'wb') as f:
+            pickle.dump((verbose, Zs), f)
 
         print("plotting...")
         plot = self.get_embedding_plot(points, targets, self.annotation)
@@ -343,6 +375,18 @@ class CNN_Module(pl.LightningModule):
         print("added imprint")
         self.log('gmm bic', self.gmm.bic(points), sync_dist=True)
         print("added bic")
+
+
+
+        # #hooks
+        # reps = self.rep_out[f'feats{self.out_height}']
+        # print("reps")
+        # print(type(reps))
+
+        # create a binary pickle file 
+        # f = open(f'{self.label}.pkl',"wb")
+        # pickle.dump(reps,f)
+        # f.close()
 
         acc = self.test_accuracy.compute()
         print('test_accuracy', acc)
