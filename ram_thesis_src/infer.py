@@ -29,6 +29,11 @@ import numpy as np
 from parsing_utils import make_parser
 from sklearn.model_selection import train_test_split
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import umap
+
+
 from lightning_driver import get_dataloaders # I don't think this is a module or anything and exit() from this file can affect infer.py
 
 class Dict2Class(object):
@@ -43,17 +48,21 @@ class Dict2Class(object):
 if __name__ == "__main__":
 
     print("inference")
+    print("DID YOU DISABLE ANY STOCHASTIC PROCESSES?")
     #there must be a better way
     # why am I doing it like this. 
-
-    with open("checkpoint.json", "r") as f:
+    # batch = ram_thesis_experiments/checkpointTEST batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 wp= 0 frames=5 steps=1 dropout=True cnn-squeeze-lstm-16.json
+    # label = f'batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 wp= 0 frames=5 steps=1 dropout=False cnn-squeeze-lstm-16'
+    label = f'batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 wp= 0 frames=5 steps=1 dropout=True cnn-squeeze-lstm-16'
+    # label = "TEST batch_size = 16 shuffle=False lr = 1e-05 wd = 0.0 wp= 0 frames=5 steps=1 dropout=False cnn-squeeze-lstm'
+    with open(f"ram_thesis_experiments/checkpoint{label}.json", "r") as f:
         model_card = json.load(f)
     args = Dict2Class(model_card['args'])
 
     print(args.agg)
     print()
 
-    model = CNN_Module(number_of_frames= args.time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
+    model = CNN_Module(number_of_frames= args.time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=False, aggregator=args.agg)
     print(model)
     print(model.state_dict().keys())
     print(model_card['checkpoint'])
@@ -81,11 +90,16 @@ if __name__ == "__main__":
     print("loaded trainer")
     trainer.test(model=model, dataloaders=test_dataloader)
 
+    
+
+
+
+
     exit()
 
-    # TODO - debug gmm
-    # TODO - increase final embedding size? 
+
+
     # TODO - pick better dim reduciton that gmm will find two components... 
-    # TODO - set up fine saving nicely. more dicts?
+
 
 
