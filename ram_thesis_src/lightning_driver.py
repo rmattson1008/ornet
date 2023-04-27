@@ -69,9 +69,10 @@ def get_dataloaders(args,time_steps=3, frames_per_chunk=3, resize=224, wildtype_
     Access ornet dataset, pass any initial transformations to dataset,
     split into train/test/validate, and return dataloaders
     """
+    # data_split_seed = 
     X, y = get_accept_list("/data/ornet/gmm_intermediates", ['control', 'mdivi', 'llo'])
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
-    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=39)
+    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=69)
 
     transform = transforms.Compose([transforms.ToTensor(),transforms.Resize(size=resize, antialias=True)])
     # TODO - some sort of normalizing step?
@@ -114,17 +115,30 @@ if __name__ == "__main__":
         lr=[0.00001],
         batch_size=[16],
         time_steps=[5],
-        wd =  [0.0, 0.01],
+        wd =  [0.0],
         dropout = [True, False],
-        shuffle=[True, False],
-        agg = ['mean', 'lstm', 'flatten'],
-        wildtype_p = [0,.5]
+        shuffle=[False],
+        agg = ['lstm'],
+        wildtype_p = [0, .05, 0.1], #cool. maybe even .2!!!
+        lstm_dropout = [0,.25,.5]
     )
+
+
+    # hyper_parameters = dict(
+    #     lr=[0.00001],
+    #     batch_size=[16],
+    #     time_steps=[5],
+    #     wd =  [0.0],
+    #     dropout = [True],
+    #     shuffle=[False],
+    #     agg = ['lstm'],
+    #     wildtype_p = [0.2] #cool.
+    # )
 
     # idk what im doing!!!
     param_values = [v for v in hyper_parameters.values()]
 
-    for lr, batch_size, time_steps, wd, dropout, shuffle, agg, wildtype_p in product(*param_values):
+    for lr, batch_size, time_steps, wd, dropout, shuffle, agg, wildtype_p, lstm_dropout in product(*param_values):
         args.lr = lr
         args.batch_size = batch_size
         args.shuffle = shuffle
@@ -137,10 +151,16 @@ if __name__ == "__main__":
 
         args.agg = agg
         args.wildtype_p = wildtype_p
+        args.lstm_dropout = lstm_dropout
 
-        args.comment = f' batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} wp= {args.wildtype_p} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}'
+        if not dropout and args.wildtype_p ==0 and lstm_dropout==0:
+            args.epochs=100
+
+        # self.outheight
+        args.comment = f'batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} wp= {args.wildtype_p} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}-16'
+        # args.comment = 
         path = "ram_thesis_experiments/" + args.comment + ".pth"
-        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg)
+        model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg, lstm_dropout=args.lstm_dropout)
         logger = TensorBoardLogger("tb_logs", name=args.comment)
 
         # trainer = pl.Trainer(accelerator="gpu", devices=2, max_epochs=args.epochs, logger=logger, log_every_n_steps=10, strategy = "ddp_find_unused_parameters_false", deterministic=True,callbacks=[EarlyStopping(monitor="val_loss", mode="min",patience=6,stopping_threshold=.02, divergence_threshold=2)])
@@ -165,12 +185,13 @@ if __name__ == "__main__":
 
         print(model_info)
         json_object = json.dumps(model_info, indent=4)
-        with open("checkpoint" + args.comment + ".json", "w") as outfile:
+        with open("ram_thesis_experiments/checkpoint" + args.comment + ".json", "w") as outfile:
             outfile.write(json_object)
 
             
         print("leaving code loop")
         # break
+    #there is some sort of memory cleaning that needs to be done after each consecutive model training, I do not know how to do that. 
     print("leaving training  program now")
     exit()
 
