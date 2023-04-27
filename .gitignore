@@ -32,3 +32,8 @@ keep_ckpt/*
 *experiments/*
 ram_notebooks/*
 benchmark_models/*
+
+*/json
+*gif*
+projections*
+*.png
