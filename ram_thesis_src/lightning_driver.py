@@ -157,7 +157,7 @@ if __name__ == "__main__":
             args.epochs=100
 
         # self.outheight
-        args.comment = f'batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} wp= {args.wildtype_p} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}-16'
+        args.comment = f'batch_size = {args.batch_size} shuffle={shuffle} lr = {args.lr} wd = {args.weight_decay} wp= {args.wildtype_p} frames={time_steps} steps={args.step} dropout={dropout} cnn-squeeze-{args.agg}-{lstm_dropout}-16'
         # args.comment = 
         path = "ram_thesis_experiments/" + args.comment + ".pth"
         model = CNN_Module(number_of_frames=time_steps, num_classes=2, learning_rate= args.lr, weight_decay=args.weight_decay, label= args.comment,  dropout=args.dropout, aggregator=args.agg, lstm_dropout=args.lstm_dropout)

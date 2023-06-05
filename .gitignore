@@ -34,6 +34,5 @@ ram_notebooks/*
 benchmark_models/*
 
 */json
-*gif*
-projections*
+gifs_backup
 *.png
